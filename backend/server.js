@@ -247,8 +247,9 @@ app.get('/admin', (req, res) => {
             </script>
         `);
     }
+    let decoded;
     try {
-        jwt.verify(token, JWT_SECRET);
+        decoded = jwt.verify(token, JWT_SECRET);
     } catch (e) {
         return res.send(`
             <script>
@@ -256,6 +257,7 @@ app.get('/admin', (req, res) => {
             </script>
         `);
     }
+    const username = decoded.username || 'Admin';
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -354,7 +356,7 @@ app.get('/admin', (req, res) => {
 
                     <div class="flex items-center gap-5">
                         <div class="flex flex-col items-end hidden sm:flex">
-                            <span class="text-xs font-bold text-white">Mufacode</span>
+                            <span class="text-xs font-bold text-white">${username}</span>
                             <span class="text-[10px] text-blue-400 font-medium">Verified Admin</span>
                         </div>
                         <div class="relative">
