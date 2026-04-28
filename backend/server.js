@@ -78,22 +78,7 @@ let mockTeam = [];
 let mockAdmins = [];
 let mockMessages = [];
 
-// Nodemailer Config
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-// Verify Transporter
-transporter.verify((error, success) => {
-  if (error) console.error("Email Config Error:", error.message);
-  else console.log("Email System Ready - Sending from:", process.env.EMAIL_USER);
-});
+// Email system removed - Now using direct links from frontend
 
 // Auth Routes
 app.post('/api/auth/register', async (req, res) => {
@@ -229,115 +214,7 @@ app.delete('/api/projects/latest/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Messages API
-app.get('/api/messages', verifyToken, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM messages ORDER BY created_at DESC');
-    res.json(result.rows);
-  } catch (err) {
-    res.json(mockMessages);
-  }
-});
-
-app.post('/api/contact', async (req, res) => {
-  const { name, email, subject, message } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO messages (name, email, subject, message) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, email, subject, message]
-    );
-
-    // Kirim notifikasi ke email admin jika kredensial sudah diatur
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      transporter.sendMail({
-        from: `"GRADASIWEB SYSTEM" <${process.env.EMAIL_USER}>`,
-        to: 'gradasiweb@gmail.com', // Email tujuan admin
-        subject: `[PESAN BARU] ${name} - ${subject}`,
-        html: `
-          <div style="font-family: sans-serif; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
-            <h2 style="color: #2563eb;">Pesan Baru dari Website!</h2>
-            <p>Seseorang telah mengirim pesan melalui formulir kontak:</p>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr><td style="font-weight: bold; padding: 5px 0;">Nama:</td><td>${name}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px 0;">Email:</td><td>${email}</td></tr>
-              <tr><td style="font-weight: bold; padding: 5px 0;">Subjek:</td><td>${subject}</td></tr>
-            </table>
-            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 15px;">
-              <p style="margin: 0; font-style: italic;">"${message}"</p>
-            </div>
-            <p style="margin-top: 20px;">
-              <a href="http://localhost:1001/admin" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Buka Admin Dashboard</a>
-            </p>
-          </div>
-        `
-      }).catch(e => console.log("Notif Admin Error:", e.message));
-    }
-
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    const newMessage = { id: Date.now(), name, email, subject, message, is_read: false, created_at: new Date() };
-    mockMessages.push(newMessage);
-    res.status(201).json(newMessage);
-  }
-});
-
-app.post('/api/messages/:id/reply', verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const { reply_content } = req.body;
-
-  const hasEnv = process.env.EMAIL_USER && 
-                 process.env.EMAIL_PASS && 
-                 process.env.EMAIL_USER !== 'emailanda@gmail.com';
-
-  try {
-    let msg;
-    try {
-      const msgResult = await pool.query('SELECT * FROM messages WHERE id = $1', [id]);
-      msg = msgResult.rows[0];
-    } catch (dbErr) {
-      console.warn("DB Error, falling back to Mock:", dbErr.message);
-      msg = mockMessages.find(m => m.id == id);
-    }
-    
-    if (msg) {
-      if (hasEnv) {
-        console.log(`Attempting to send reply to ${msg.email}...`);
-        await transporter.sendMail({
-          from: `"GRADASIWEB Admin" <${process.env.EMAIL_USER}>`,
-          to: msg.email,
-          subject: `Re: ${msg.subject || 'Kontak Gradasiweb'}`,
-          text: reply_content
-        });
-        console.log("Reply sent successfully!");
-        
-        try {
-          await pool.query('UPDATE messages SET reply_content = $1, is_read = true WHERE id = $2', [reply_content, id]);
-        } catch(e) {}
-
-        return res.json({ message: 'Reply sent via Gmail!' });
-      } else {
-        return res.json({ 
-          message: 'Reply saved to dashboard!', 
-          warning: 'Sent via Mock (Email tidak terkirim karena .env belum diisi)' 
-        });
-      }
-    }
-    res.status(404).json({ message: 'Message not found' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error', error: err.message });
-  }
-});
-
-app.delete('/api/messages/:id', verifyToken, async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM messages WHERE id = $1', [id]);
-    res.status(204).send();
-  } catch (err) {
-    mockMessages = mockMessages.filter(m => m.id != id);
-    res.status(204).send();
-  }
-});
+// Routes simplified for ease of use
 app.get('/api/packages', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM packages ORDER BY id ASC');
@@ -521,10 +398,6 @@ app.get('/admin', (req, res) => {
                         <button onclick="switchTab('terbaru')" id="tab-terbaru" class="pb-1 transition-all tab-inactive hover:text-blue-300">Terbaru</button>
                         <button onclick="switchTab('packages')" id="tab-packages" class="pb-1 transition-all tab-inactive hover:text-blue-300">Packages</button>
                         <button onclick="switchTab('team')" id="tab-team" class="pb-1 transition-all tab-inactive hover:text-blue-300">Team</button>
-                        <button onclick="switchTab('messages')" id="tab-messages" class="pb-1 transition-all tab-inactive hover:text-blue-300 flex items-center gap-2">
-                            Messages
-                            <span id="nav-msg-count" class="hidden w-4 h-4 bg-blue-500 rounded-full text-[8px] flex items-center justify-center text-white">0</span>
-                        </button>
                         <a href="http://localhost:1001/gradasiweb/" target="_blank" class="text-slate-500 hover:text-white transition-colors flex items-center gap-2">
                             View Site <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                         </a>
