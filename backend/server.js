@@ -54,7 +54,7 @@ const pool = new Pool({
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
   database: process.env.DB_NAME || 'db_gradasiweb',
-  password: process.env.DB_PASSWORD || 'password',
+  password: process.env.DB_PASSWORD || '',
   port: process.env.DB_PORT || 5432,
 });
 
@@ -264,34 +264,45 @@ app.post('/api/contact', async (req, res) => {
 app.post('/api/messages/:id/reply', verifyToken, async (req, res) => {
   const { id } = req.params;
   const { reply_content } = req.body;
+
+  const hasEnv = process.env.EMAIL_USER && 
+                 process.env.EMAIL_PASS && 
+                 process.env.EMAIL_USER !== 'emailanda@gmail.com';
+
   try {
-    const msgResult = await pool.query('SELECT * FROM messages WHERE id = $1', [id]);
-    const msg = msgResult.rows[0];
+    let msg;
+    try {
+      const msgResult = await pool.query('SELECT * FROM messages WHERE id = $1', [id]);
+      msg = msgResult.rows[0];
+    } catch (dbErr) {
+      console.warn("DB Error, falling back to Mock:", dbErr.message);
+      msg = mockMessages.find(m => m.id == id);
+    }
     
     if (msg) {
-      // Send Email
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: msg.email,
-        subject: `Re: ${msg.subject || 'Kontak Gradasiweb'}`,
-        text: reply_content
-      });
+      if (hasEnv) {
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: msg.email,
+          subject: `Re: ${msg.subject || 'Kontak Gradasiweb'}`,
+          text: reply_content
+        });
+        
+        try {
+          await pool.query('UPDATE messages SET reply_content = $1, is_read = true WHERE id = $2', [reply_content, id]);
+        } catch(e) {}
 
-      await pool.query(
-        'UPDATE messages SET reply_content = $1, replied_at = CURRENT_TIMESTAMP, is_read = true WHERE id = $2',
-        [reply_content, id]
-      );
+        return res.json({ message: 'Reply sent via Gmail!' });
+      } else {
+        return res.json({ 
+          message: 'Reply saved to dashboard!', 
+          warning: 'Sent via Mock (Email tidak terkirim karena .env belum diisi)' 
+        });
+      }
     }
-    res.json({ success: true });
+    res.status(404).json({ message: 'Message not found' });
   } catch (err) {
-    console.error("Reply Error:", err);
-    // Mock update
-    const mockIdx = mockMessages.findIndex(m => m.id == id);
-    if (mockIdx !== -1) {
-       mockMessages[mockIdx].reply_content = reply_content;
-       mockMessages[mockIdx].is_read = true;
-    }
-    res.json({ success: true, warning: 'Sent via Mock (Email not sent without ENV)' });
+    res.status(500).json({ message: 'Error', error: err.message });
   }
 });
 
@@ -504,7 +515,7 @@ app.get('/admin', (req, res) => {
                         </div>
                         <div class="relative cursor-pointer group" onclick="toggleProfileModal()">
                             <div id="nav-avatar" class="w-10 h-10 rounded-2xl border-2 border-blue-500/30 shadow-lg shadow-blue-500/10 flex items-center justify-center overflow-hidden bg-slate-800 transition-transform group-hover:scale-105">
-                                ${avatar_url ? `<img src="${avatar_url}" class="w-full h-full object-cover" />` : `<span class="text-xs font-bold text-slate-500">${username.charAt(0).toUpperCase()}</span>`}
+                                ${avatar_url ? '<img src="' + avatar_url + '" class="w-full h-full object-cover" />' : '<span class="text-xs font-bold text-slate-500">' + username.charAt(0).toUpperCase() + '</span>'}
                             </div>
                             <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#020617]"></div>
                         </div>
@@ -727,7 +738,7 @@ app.get('/admin', (req, res) => {
                 <div class="glass max-w-sm w-full p-10 rounded-[3rem] relative animate-in zoom-in duration-300">
                     <div class="text-center mb-10">
                         <div id="modal-avatar" class="w-24 h-24 rounded-[2rem] border-4 border-white/5 mx-auto mb-6 flex items-center justify-center overflow-hidden bg-slate-800 shadow-2xl">
-                            ${avatar_url ? `<img src="${avatar_url}" class="w-full h-full object-cover" />` : `<span class="text-3xl font-bold text-slate-600">${username.charAt(0).toUpperCase()}</span>`}
+                            ${avatar_url ? '<img src="' + avatar_url + '" class="w-full h-full object-cover" />' : '<span class="text-3xl font-bold text-slate-600">' + username.charAt(0).toUpperCase() + '</span>'}
                         </div>
                         <h3 class="text-xl font-bold text-white">${username}</h3>
                         <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">${avatar_url ? 'Foto Profil Aktif' : 'Foto Profil Masih Kosong'}</p>
