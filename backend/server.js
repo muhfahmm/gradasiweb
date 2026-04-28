@@ -1,9 +1,9 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -68,11 +68,19 @@ let mockMessages = [];
 
 // Nodemailer Config
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   }
+});
+
+// Verify Transporter
+transporter.verify((error, success) => {
+  if (error) console.error("Email Config Error:", error.message);
+  else console.log("Email System Ready - Sending from:", process.env.EMAIL_USER);
 });
 
 // Auth Routes
@@ -281,12 +289,14 @@ app.post('/api/messages/:id/reply', verifyToken, async (req, res) => {
     
     if (msg) {
       if (hasEnv) {
+        console.log(`Attempting to send reply to ${msg.email}...`);
         await transporter.sendMail({
-          from: process.env.EMAIL_USER,
+          from: `"GRADASIWEB Admin" <${process.env.EMAIL_USER}>`,
           to: msg.email,
           subject: `Re: ${msg.subject || 'Kontak Gradasiweb'}`,
           text: reply_content
         });
+        console.log("Reply sent successfully!");
         
         try {
           await pool.query('UPDATE messages SET reply_content = $1, is_read = true WHERE id = $2', [reply_content, id]);
@@ -759,23 +769,32 @@ app.get('/admin', (req, res) => {
 
             <!-- REPLY MODAL -->
             <div id="replyModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center px-4">
-                <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeReplyModal()"></div>
-                <div class="glass max-w-2xl w-full p-10 rounded-[3rem] relative animate-in zoom-in duration-300">
-                    <h3 class="text-2xl font-bold text-white mb-2">Reply to Client</h3>
-                    <p id="reply-to-email" class="text-sm text-slate-500 mb-8 font-medium italic"></p>
-                    <div class="space-y-6">
-                        <div class="p-6 bg-slate-900/50 rounded-2xl border border-white/5">
-                            <div class="text-[10px] font-black uppercase text-slate-600 mb-3 tracking-widest">Original Message</div>
-                            <p id="original-msg" class="text-sm text-slate-300 italic"></p>
+                <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="closeReplyModal()"></div>
+                <div class="glass max-w-2xl w-full p-12 rounded-[3.5rem] relative animate-in zoom-in duration-300">
+                    <h3 class="text-3xl font-bold text-white mb-2">Reply to Client</h3>
+                    <p id="reply-to-email" class="text-xs text-slate-500 font-bold uppercase tracking-widest mb-10"></p>
+                    
+                    <div class="space-y-8">
+                        <div class="p-6 bg-slate-900/40 rounded-3xl border border-white/5">
+                            <div class="text-[8px] font-black text-slate-600 uppercase tracking-[0.3em] mb-3">Original Message</div>
+                            <p id="original-msg" class="text-sm text-slate-400 italic leading-relaxed"></p>
                         </div>
-                        <textarea id="reply_content" rows="6" class="w-full rounded-2xl px-6 py-5 text-sm" placeholder="Write your professional response here..."></textarea>
+                        
+                        <div class="space-y-3">
+                            <textarea id="reply_content" rows="6" class="w-full rounded-3xl px-6 py-5 text-sm" placeholder="Type your professional reply here..."></textarea>
+                        </div>
+
                         <input type="hidden" id="reply-msg-id">
-                        <button onclick="submitReply()" id="btn-send-reply" class="w-full py-4 gradient-bg rounded-2xl font-bold text-white shadow-xl shadow-blue-500/20 hover:scale-[1.02] transition-all">
-                            Send Reply to Gmail
-                        </button>
+                        
+                        <div class="flex gap-4">
+                            <button onclick="closeReplyModal()" class="flex-grow py-4 rounded-2xl font-bold text-sm text-slate-400 bg-white/5 hover:bg-white/10 transition-all">Cancel</button>
+                            <button id="btn-send-reply" onclick="submitReply()" class="flex-[2] py-4 rounded-2xl font-bold text-sm text-white bg-blue-600 hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20">Send Reply to Gmail</button>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            ${fs.readFileSync(path.join(__dirname, 'views', 'modals', 'ReplySuccessModal.html'), 'utf8')}
 
             <script>
                 // Clock
@@ -1103,8 +1122,9 @@ app.get('/admin', (req, res) => {
                             body: JSON.stringify({ reply_content })
                         });
                         const data = await res.json();
-                        if(data.warning) alert(data.warning);
                         closeReplyModal();
+                        if(data.warning) alert(data.warning);
+                        else openReplySuccessModal();
                         fetchMessages();
                     } catch (e) {
                         alert('Error sending reply');
