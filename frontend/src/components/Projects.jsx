@@ -10,9 +10,8 @@ const Projects = () => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const res = await axios.get('/api/projects');
-        const featuredProjects = res.data.filter(p => p.is_featured);
-        setProjects(featuredProjects);
+        const res = await axios.get('/api/projects/featured');
+        setProjects(res.data);
       } catch (err) {
         console.error("Failed to fetch projects:", err);
       } finally {
@@ -31,6 +30,10 @@ const Projects = () => {
 
       {loading ? (
         <div className="text-center py-20">Memuat data proyek...</div>
+      ) : projects.length === 0 ? (
+        <div className="text-center text-slate-400 py-16 border-2 border-dashed border-slate-700 rounded-[2.5rem]">
+          Belum ada proyek unggulan tersedia.
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {projects.map((project, idx) => (

@@ -34,7 +34,13 @@ const TimKami = () => {
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-        {team.map((member, idx) => (
+        {loading ? (
+          <div className="col-span-1 md:col-span-3 text-center py-20 text-slate-400 animate-pulse font-bold uppercase tracking-widest">Memuat tim kami...</div>
+        ) : team.length === 0 ? (
+          <div className="col-span-1 md:col-span-3 text-center text-slate-400 py-20 border-2 border-dashed border-slate-700 rounded-[3rem]">
+            Tim kami sedang dalam proses pembaruan.
+          </div>
+        ) : team.map((member, idx) => (
           <motion.div
             key={idx}
             initial={{ opacity: 0, y: 20 }}

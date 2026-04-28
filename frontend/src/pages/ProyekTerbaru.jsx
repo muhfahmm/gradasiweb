@@ -10,7 +10,7 @@ const ProyekTerbaru = () => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const res = await axios.get('/api/projects');
+        const res = await axios.get('/api/projects/latest');
         setProjects(res.data);
       } catch (err) {
         console.error("Failed to fetch projects:", err);
@@ -43,7 +43,11 @@ const ProyekTerbaru = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          {projects.map((project, idx) => (
+          {projects.length === 0 ? (
+             <div className="col-span-1 md:col-span-3 text-center text-slate-400 py-20 border-2 border-dashed border-slate-700 rounded-[3rem]">
+               Belum ada proyek terbaru tersedia.
+             </div>
+          ) : projects.map((project, idx) => (
             <motion.div
               key={project.id}
               initial={{ opacity: 0, y: 30 }}
