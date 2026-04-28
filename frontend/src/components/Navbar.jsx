@@ -11,7 +11,7 @@ const Navbar = () => {
   const menuItems = [
     {
       title: 'Layanan',
-      submenus: ['Pembuatan Website', 'Aplikasi Mobile', 'Desain UI/UX']
+      submenus: ['Landing Page', 'Company Profile', 'E-Commerce']
     },
     {
       title: 'Portofolio',

@@ -27,14 +27,7 @@ const Hero = () => {
             Kami membantu bisnis Anda tampil profesional di dunia digital dengan desain website modern, fungsional, dan berbasis data.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="px-10 py-4 bg-accent-primary text-white rounded-full font-bold hover:scale-105 active:scale-95 shadow-xl shadow-blue-500/30 transition-all duration-300">
-              Mulai Konsultasi
-            </button>
-            <button className="px-10 py-4 glass rounded-full font-bold hover:bg-white/10 hover:scale-105 active:scale-95 transition-all duration-300 border border-white/10">
-              Lihat Project
-            </button>
-          </div>
+
         </motion.div>
 
         {/* Floating cards for visual flair */}

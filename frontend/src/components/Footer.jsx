@@ -18,16 +18,7 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div>
-            <h4 className="font-bold mb-6">Navigasi</h4>
-            <ul className="space-y-3 text-secondary text-sm">
-              <li><a href="#" className="hover:text-accent-primary transition-colors">Beranda</a></li>
-              <li><a href="#projects" className="hover:text-accent-primary transition-colors">Portofolio</a></li>
-              <li><a href="#packages" className="hover:text-accent-primary transition-colors">Harga</a></li>
-              <li><a href="#" className="hover:text-accent-primary transition-colors">Tentang Kami</a></li>
-            </ul>
-          </div>
+
 
           {/* Services */}
           <div>
@@ -36,7 +27,7 @@ const Footer = () => {
               <li><a href="#" className="hover:text-accent-primary transition-colors">Landing Page</a></li>
               <li><a href="#" className="hover:text-accent-primary transition-colors">Company Profile</a></li>
               <li><a href="#" className="hover:text-accent-primary transition-colors">E-Commerce</a></li>
-              <li><a href="#" className="hover:text-accent-primary transition-colors">UI/UX Design</a></li>
+
             </ul>
           </div>
 
@@ -44,9 +35,9 @@ const Footer = () => {
           <div>
             <h4 className="font-bold mb-6">Hubungi Kami</h4>
             <ul className="space-y-4 text-secondary text-sm">
-              <li className="flex gap-3"><Mail size={18} className="text-accent-primary" /> hello@gradasiweb.com</li>
+              <li className="flex gap-3"><Mail size={18} className="text-accent-primary" /> gradasiweb.com</li>
               <li className="flex gap-3"><Phone size={18} className="text-accent-primary" /> +62 889 8351 4206</li>
-              <li className="flex gap-3"><MapPin size={18} className="text-accent-primary" /> Jakarta, Indonesia</li>
+              <li className="flex gap-3"><MapPin size={18} className="text-accent-primary" /> Sukoharjo, Jawa Tengah</li>
             </ul>
           </div>
         </div>
