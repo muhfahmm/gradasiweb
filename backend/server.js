@@ -5,6 +5,9 @@ require('dotenv').config();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const uploadDir = path.join(__dirname, 'uploads');
@@ -26,7 +29,24 @@ const port = process.env.PORT || 1000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const JWT_SECRET = process.env.JWT_SECRET || 'gradasiweb_super_secret_key';
+
+// Auth Middleware
+const verifyToken = (req, res, next) => {
+  const token = req.cookies.token || req.headers['authorization'];
+  if (!token) return res.status(401).json({ message: 'Akses ditolak. Silakan login.' });
+
+  try {
+    const verified = jwt.verify(token.startsWith('Bearer ') ? token.slice(7) : token, JWT_SECRET);
+    req.user = verified;
+    next();
+  } catch (err) {
+    res.status(400).json({ message: 'Token tidak valid.' });
+  }
+};
 
 // DB Connection
 const pool = new Pool({
@@ -56,6 +76,57 @@ let mockTeam = [
   { id: 3, name: 'Alex', role: 'Project Manager', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80' }
 ];
 
+let mockAdmins = [];
+
+// Auth Routes
+app.post('/api/auth/register', async (req, res) => {
+  const { username, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  try {
+    const result = await pool.query(
+      'INSERT INTO admins (username, password) VALUES ($1, $2) RETURNING id, username',
+      [username, hashedPassword]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("DB Register Error, using mock:", err.message);
+    const newUser = { id: Date.now(), username, password: hashedPassword };
+    mockAdmins.push(newUser);
+    res.status(201).json({ id: newUser.id, username: newUser.username });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  let user;
+  
+  try {
+    const result = await pool.query('SELECT * FROM admins WHERE username = $1', [username]);
+    if (result.rows.length > 0) {
+      user = result.rows[0];
+    } else {
+      user = mockAdmins.find(u => u.username === username);
+    }
+  } catch (err) {
+    console.error("DB Login Error, using mock:", err.message);
+    user = mockAdmins.find(u => u.username === username);
+  }
+
+  if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+  const validPass = await bcrypt.compare(password, user.password);
+  if (!validPass) return res.status(400).json({ message: 'Password salah' });
+
+  const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1d' });
+  res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
+  res.json({ token, user: { id: user.id, username: user.username } });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ message: 'Logged out' });
+});
+
 // API Routes
 app.get('/api/projects', async (req, res) => {
   try {
@@ -66,7 +137,7 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-app.post('/api/projects', upload.single('image'), async (req, res) => {
+app.post('/api/projects', verifyToken, upload.single('image'), async (req, res) => {
   const { title, description, link, category, is_featured } = req.body;
   const image_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image_url || '';
   try {
@@ -82,7 +153,7 @@ app.post('/api/projects', upload.single('image'), async (req, res) => {
   }
 });
 
-app.delete('/api/projects/:id', async (req, res) => {
+app.delete('/api/projects/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM projects WHERE id = $1', [id]);
@@ -103,7 +174,7 @@ app.get('/api/packages', async (req, res) => {
   }
 });
 
-app.post('/api/packages', async (req, res) => {
+app.post('/api/packages', verifyToken, async (req, res) => {
   const { name, price, features, recommended } = req.body;
   try {
     const result = await pool.query(
@@ -118,7 +189,7 @@ app.post('/api/packages', async (req, res) => {
   }
 });
 
-app.delete('/api/packages/:id', async (req, res) => {
+app.delete('/api/packages/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM packages WHERE id = $1', [id]);
@@ -139,7 +210,7 @@ app.get('/api/team', async (req, res) => {
   }
 });
 
-app.post('/api/team', upload.single('image'), async (req, res) => {
+app.post('/api/team', verifyToken, upload.single('image'), async (req, res) => {
   const { name, role } = req.body;
   const image = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image || '';
   try {
@@ -155,7 +226,7 @@ app.post('/api/team', upload.single('image'), async (req, res) => {
   }
 });
 
-app.delete('/api/team/:id', async (req, res) => {
+app.delete('/api/team/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM team WHERE id = $1', [id]);
@@ -168,6 +239,23 @@ app.delete('/api/team/:id', async (req, res) => {
 
 // Serve Admin UI
 app.get('/admin', (req, res) => {
+    const token = req.cookies.token;
+    if (!token) {
+        return res.send(`
+            <script>
+                window.location.href = 'http://localhost:1001/gradasiweb/login';
+            </script>
+        `);
+    }
+    try {
+        jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+        return res.send(`
+            <script>
+                window.location.href = 'http://localhost:1001/gradasiweb/login';
+            </script>
+        `);
+    }
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -273,6 +361,9 @@ app.get('/admin', (req, res) => {
                             <img src="https://github.com/muhfahmm.png" class="w-10 h-10 rounded-2xl border-2 border-blue-500/30 shadow-lg shadow-blue-500/10" />
                             <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#020617]"></div>
                         </div>
+                        <button onclick="handleLogout()" class="p-3 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all group" title="Logout">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        </button>
                     </div>
                 </div>
             </nav>
@@ -475,6 +566,12 @@ app.get('/admin', (req, res) => {
                     }
                 }
 
+                function handleLogout() {
+                    if(!confirm('Anda yakin ingin keluar?')) return;
+                    fetch('/api/auth/logout', { method: 'POST' })
+                        .then(() => window.location.href = 'http://localhost:1001/gradasiweb/login');
+                }
+
                 // Data Handling
                 async function fetchProjects() {
                     try {
@@ -575,7 +672,7 @@ app.get('/admin', (req, res) => {
                         const res = await fetch('/api/team');
                         const data = await res.json();
                         document.getElementById('stat-team').innerText = data.length;
-                        document.getElementById('teamList').innerHTML = data.map(m => `
+                        document.getElementById('teamList').innerHTML = data.map(m => \`
                             <div class="glass bg-slate-900/30 border border-white/5 p-6 rounded-[2.5rem] flex items-center gap-6 group">
                                 <div class="w-20 h-20 rounded-2xl overflow-hidden shrink-0 border border-white/10">
                                     <img src="\${m.image || 'https://via.placeholder.com/200'}" class="w-full h-full object-cover group-hover:scale-110 transition-transform" />
@@ -588,7 +685,7 @@ app.get('/admin', (req, res) => {
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                 </button>
                             </div>
-                        `).join('') || '<div class="py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20 italic">No members added</div>';
+                        \`).join('') || '<div class="py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20 italic">No members added</div>';
                     } catch (e) { console.error(e); }
                 }
 
