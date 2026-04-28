@@ -117,9 +117,33 @@ app.post('/api/auth/login', async (req, res) => {
   const validPass = await bcrypt.compare(password, user.password);
   if (!validPass) return res.status(400).json({ message: 'Password salah' });
 
-  const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1d' });
+  const token = jwt.sign({ id: user.id, username: user.username, avatar_url: user.avatar_url }, JWT_SECRET, { expiresIn: '1d' });
   res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
-  res.json({ token, user: { id: user.id, username: user.username } });
+  res.json({ token, user: { id: user.id, username: user.username, avatar_url: user.avatar_url } });
+});
+
+// Profile Pic API
+app.post('/api/auth/profile-pic', verifyToken, upload.single('avatar'), async (req, res) => {
+  const avatar_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.avatar_url;
+  try {
+    await pool.query('UPDATE admins SET avatar_url = $1 WHERE id = $2', [avatar_url, req.user.id]);
+    res.json({ avatar_url });
+  } catch (err) {
+    const admin = mockAdmins.find(u => u.id == req.user.id);
+    if(admin) admin.avatar_url = avatar_url;
+    res.json({ avatar_url });
+  }
+});
+
+app.delete('/api/auth/profile-pic', verifyToken, async (req, res) => {
+  try {
+    await pool.query('UPDATE admins SET avatar_url = NULL WHERE id = $1', [req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    const admin = mockAdmins.find(u => u.id == req.user.id);
+    if(admin) admin.avatar_url = null;
+    res.json({ success: true });
+  }
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -258,6 +282,7 @@ app.get('/admin', (req, res) => {
         `);
     }
     const username = decoded.username || 'Admin';
+    const avatar_url = decoded.avatar_url || '';
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -359,8 +384,10 @@ app.get('/admin', (req, res) => {
                             <span class="text-xs font-bold text-white">${username}</span>
                             <span class="text-[10px] text-blue-400 font-medium">Verified Admin</span>
                         </div>
-                        <div class="relative">
-                            <img src="https://github.com/muhfahmm.png" class="w-10 h-10 rounded-2xl border-2 border-blue-500/30 shadow-lg shadow-blue-500/10" />
+                        <div class="relative cursor-pointer group" onclick="toggleProfileModal()">
+                            <div id="nav-avatar" class="w-10 h-10 rounded-2xl border-2 border-blue-500/30 shadow-lg shadow-blue-500/10 flex items-center justify-center overflow-hidden bg-slate-800 transition-transform group-hover:scale-105">
+                                ${avatar_url ? `<img src="${avatar_url}" class="w-full h-full object-cover" />` : `<span class="text-xs font-bold text-slate-500">${username.charAt(0).toUpperCase()}</span>`}
+                            </div>
                             <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#020617]"></div>
                         </div>
                         <button onclick="handleLogout()" class="p-3 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all group" title="Logout">
@@ -534,6 +561,31 @@ app.get('/admin', (req, res) => {
                 </div>
             </div>
 
+            <!-- PROFILE MODAL -->
+            <div id="profileModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center px-4">
+                <div class="absolute inset-0 bg-black/60 backdrop-blur-md" onclick="toggleProfileModal()"></div>
+                <div class="glass max-w-sm w-full p-10 rounded-[3rem] relative animate-in zoom-in duration-300">
+                    <div class="text-center mb-10">
+                        <div id="modal-avatar" class="w-24 h-24 rounded-[2rem] border-4 border-white/5 mx-auto mb-6 flex items-center justify-center overflow-hidden bg-slate-800 shadow-2xl">
+                            ${avatar_url ? `<img src="${avatar_url}" class="w-full h-full object-cover" />` : `<span class="text-3xl font-bold text-slate-600">${username.charAt(0).toUpperCase()}</span>`}
+                        </div>
+                        <h3 class="text-xl font-bold text-white">${username}</h3>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">${avatar_url ? 'Foto Profil Aktif' : 'Foto Profil Masih Kosong'}</p>
+                    </div>
+                    <div class="space-y-4">
+                        <label class="block">
+                            <span class="btn-primary w-full py-4 rounded-2xl font-bold text-sm text-white flex items-center justify-center gap-3 cursor-pointer">
+                                📷 Ubah Foto
+                                <input type="file" id="avatarInput" accept="image/*" class="hidden" onchange="uploadAvatar(this)">
+                            </span>
+                        </label>
+                        <button onclick="deleteAvatar()" class="w-full py-4 rounded-2xl font-bold text-sm text-red-500/80 bg-red-500/5 hover:bg-red-500 hover:text-white transition-all">
+                            🗑️ Hapus Foto
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <script>
                 // Clock
                 setInterval(() => {
@@ -566,6 +618,31 @@ app.get('/admin', (req, res) => {
                         team.classList.remove('hidden');
                         tabT.className = 'pb-1 transition-all tab-active';
                     }
+                }
+
+                function toggleProfileModal() {
+                    const modal = document.getElementById('profileModal');
+                    modal.classList.toggle('hidden');
+                }
+
+                async function uploadAvatar(input) {
+                    if (!input.files || !input.files[0]) return;
+                    const formData = new FormData();
+                    formData.append('avatar', input.files[0]);
+                    
+                    try {
+                        const res = await fetch('/api/auth/profile-pic', { method: 'POST', body: formData });
+                        const data = await res.json();
+                        location.reload(); // Reload to update all avatars and JWT session
+                    } catch (e) { alert('Gagal mengunggah foto'); }
+                }
+
+                async function deleteAvatar() {
+                    if(!confirm('Hapus foto profil?')) return;
+                    try {
+                        await fetch('/api/auth/profile-pic', { method: 'DELETE' });
+                        location.reload();
+                    } catch (e) { alert('Gagal menghapus foto'); }
                 }
 
                 function handleLogout() {

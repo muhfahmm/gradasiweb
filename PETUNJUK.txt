@@ -1,0 +1,62 @@
+==================================================
+   PETUNJUK PENGGUNAAN PROYEK GRADASIWEB
+==================================================
+
+Proyek ini terdiri dari dua bagian: Frontend (React) dan Backend (Node.js Express).
+
+1. PERSIAPAN AWAL
+----------------
+- Pastikan sudah menginstal Node.js.
+- Pastikan sudah menginstal PostgreSQL dan membuat database bernama 'db_gradasiweb'.
+
+2. INSTALASI DEPENDENSI
+-----------------------
+Buka terminal dan jalankan perintah berikut secara berurutan:
+
+A. Install di Root (untuk menjalankan kedua server sekaligus):
+   npm install
+
+B. Install di Backend:
+   cd backend
+   npm install
+   cd ..
+
+C. Install di Frontend:
+   cd frontend
+   npm install
+   cd ..
+
+3. SETUP DATABASE
+-----------------
+- Buka pgAdmin atau terminal PostgreSQL.
+- Jalankan isi file 'backend/schema.sql' di dalam database 'db_gradasiweb' untuk membuat tabel.
+- Jika ingin meriset database, jalankan isi file 'backend/drop_schema.sql'.
+
+4. KONFIGURASI ENV
+------------------
+- Buka file 'backend/.env'.
+- Sesuaikan DB_PASSWORD dengan password PostgreSQL Anda.
+- Jika DB_PASSWORD salah, aplikasi akan tetap jalan dalam 'Mock Mode' (data tidak permanen).
+
+5. MENJALANKAN APLIKASI
+-----------------------
+Di folder utama (root), jalankan:
+   npm run dev
+
+6. URL AKSES
+------------
+A. WEBSITE UTAMA (User):
+   http://localhost:1001/gradasiweb/
+
+B. ADMIN PANEL:
+   http://localhost:1001/admin
+
+   Catatan: 
+   - Anda harus mendaftar akun admin pertama kali di:
+     http://localhost:1001/gradasiweb/register
+   - Gunakan akun tersebut untuk login di:
+     http://localhost:1001/gradasiweb/login
+
+==================================================
+AESTHETICS & PERFORMANCE BY ANTIGRAVITY AI
+==================================================
