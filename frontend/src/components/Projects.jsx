@@ -11,7 +11,8 @@ const Projects = () => {
     const fetchProjects = async () => {
       try {
         const res = await axios.get('/api/projects');
-        setProjects(res.data);
+        const featuredProjects = res.data.filter(p => p.is_featured);
+        setProjects(featuredProjects);
       } catch (err) {
         console.error("Failed to fetch projects:", err);
       } finally {

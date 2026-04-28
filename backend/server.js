@@ -39,15 +39,21 @@ const pool = new Pool({
 
 // Mock Data Fallback
 let mockProjects = [
-  { id: 1, title: 'Company Profile', description: 'Modern company profile website for a law firm.', image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80', link: '#', category: 'Web Development' },
-  { id: 2, title: 'E-Commerce App', description: 'Full-featured online store with payment integration.', image_url: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800&q=80', link: '#', category: 'Mobile App' },
-  { id: 3, title: 'Landing Page', description: 'High-converting landing page for a SaaS product.', image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80', link: '#', category: 'UI/UX Design' }
+  { id: 1, title: 'Company Profile', description: 'Modern company profile website for a law firm.', image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80', link: '#', category: 'Web Development', is_featured: true },
+  { id: 2, title: 'E-Commerce App', description: 'Full-featured online store with payment integration.', image_url: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800&q=80', link: '#', category: 'Mobile App', is_featured: true },
+  { id: 3, title: 'Landing Page', description: 'High-converting landing page for a SaaS product.', image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80', link: '#', category: 'UI/UX Design', is_featured: true }
 ];
 
 let mockPackages = [
   { id: 1, name: 'Lite Showcase', price: 'Rp 300rb', features: 'Single Landing Page, Desain Modern, Responsive Mobile, Integrasi WhatsApp, Hosting Gratis, Revisi 1x', recommended: false },
   { id: 2, name: 'Business Pro', price: 'Rp 1jt', features: 'Hingga 5 Halaman, Custom Domain .com, Email Bisnis, SEO Optimized, Panel Admin Lite, Support 3 Bulan', recommended: true },
   { id: 3, name: 'Elite Enterprise', price: 'Rp 5-10jt', features: 'Sistem Kustom (E-Commerce/ERP), High-Speed Hosting, Keamanan SSL Premium, Maintenance 6 Bulan, Full Source Code, Konsultasi Gratis', recommended: false }
+];
+
+let mockTeam = [
+  { id: 1, name: 'Muflih', role: 'Founder & Full Stack Developer', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80' },
+  { id: 2, name: 'Sarah', role: 'UI/UX Designer', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80' },
+  { id: 3, name: 'Alex', role: 'Project Manager', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80' }
 ];
 
 // API Routes
@@ -61,16 +67,16 @@ app.get('/api/projects', async (req, res) => {
 });
 
 app.post('/api/projects', upload.single('image'), async (req, res) => {
-  const { title, description, link, category } = req.body;
+  const { title, description, link, category, is_featured } = req.body;
   const image_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image_url || '';
   try {
     const result = await pool.query(
-      'INSERT INTO projects (title, description, image_url, link, category) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [title, description, image_url, link, category]
+      'INSERT INTO projects (title, description, image_url, link, category, is_featured) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [title, description, image_url, link, category, is_featured === 'true' || is_featured === true]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    const newProj = { id: Date.now(), title, description, image_url, link, category };
+    const newProj = { id: Date.now(), title, description, image_url, link, category, is_featured: is_featured === 'true' || is_featured === true };
     mockProjects.push(newProj);
     res.status(201).json(newProj);
   }
@@ -119,6 +125,43 @@ app.delete('/api/packages/:id', async (req, res) => {
     res.status(204).send();
   } catch (err) {
     mockPackages = mockPackages.filter(p => p.id != id);
+    res.status(204).send();
+  }
+});
+
+// Team API
+app.get('/api/team', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM team ORDER BY id ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.json(mockTeam);
+  }
+});
+
+app.post('/api/team', upload.single('image'), async (req, res) => {
+  const { name, role } = req.body;
+  const image = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image || '';
+  try {
+    const result = await pool.query(
+      'INSERT INTO team (name, role, image) VALUES ($1, $2, $3) RETURNING *',
+      [name, role, image]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    const newMember = { id: Date.now(), name, role, image };
+    mockTeam.push(newMember);
+    res.status(201).json(newMember);
+  }
+});
+
+app.delete('/api/team/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM team WHERE id = $1', [id]);
+    res.status(204).send();
+  } catch (err) {
+    mockTeam = mockTeam.filter(m => m.id != id);
     res.status(204).send();
   }
 });
@@ -215,6 +258,7 @@ app.get('/admin', (req, res) => {
                     <div class="flex gap-10 text-sm font-semibold uppercase tracking-widest">
                         <button onclick="switchTab('projects')" id="tab-projects" class="pb-1 transition-all tab-active hover:text-blue-300">Projects</button>
                         <button onclick="switchTab('packages')" id="tab-packages" class="pb-1 transition-all tab-inactive hover:text-blue-300">Packages</button>
+                        <button onclick="switchTab('team')" id="tab-team" class="pb-1 transition-all tab-inactive hover:text-blue-300">Team</button>
                         <a href="http://localhost:1001/gradasiweb/" target="_blank" class="text-slate-500 hover:text-white transition-colors flex items-center gap-2">
                             View Site <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                         </a>
@@ -243,6 +287,10 @@ app.get('/admin', (req, res) => {
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-purple-500/20 transition-all">
                         <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Service Tiers</div>
                         <div class="text-4xl font-bold text-white" id="stat-packages">0</div>
+                    </div>
+                    <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-emerald-500/20 transition-all">
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Team Members</div>
+                        <div class="text-4xl font-bold text-white" id="stat-team">0</div>
                     </div>
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 bg-blue-500/5">
                         <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Server Status</div>
@@ -291,6 +339,10 @@ app.get('/admin', (req, res) => {
                                     <div class="space-y-2">
                                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Summary</label>
                                         <textarea id="proj_description" rows="3" class="w-full rounded-2xl px-5 py-4 text-sm resize-none" placeholder="Explain the project impact..." required></textarea>
+                                    </div>
+                                    <div class="flex items-center justify-between p-5 bg-slate-900/40 rounded-2xl border border-white/5">
+                                        <label for="proj_featured" class="text-xs font-bold text-slate-400 uppercase tracking-wider">Show in Home (Featured)</label>
+                                        <input type="checkbox" id="proj_featured" class="w-6 h-6 rounded-lg accent-blue-600">
                                     </div>
                                     <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white shadow-xl">Deploy Project</button>
                                 </form>
@@ -348,6 +400,45 @@ app.get('/admin', (req, res) => {
                         </div>
                     </div>
                 </div>
+
+                <!-- TEAM VIEW -->
+                <div id="view-team" class="hidden animate-in fade-in duration-500">
+                    <div class="flex flex-col xl:flex-row gap-10">
+                        <div class="xl:w-[400px] shrink-0">
+                            <div class="glass p-8 rounded-[3rem] sticky top-32">
+                                <h3 class="text-xl font-bold mb-8 text-white flex items-center gap-3">
+                                    <span class="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">👥</span>
+                                    New Member
+                                </h3>
+                                <form id="teamForm" class="space-y-6">
+                                    <div class="space-y-2">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
+                                        <input type="text" id="member_name" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="John Doe" required>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Role / Position</label>
+                                        <input type="text" id="member_role" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="UI Designer" required>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Profile Photo</label>
+                                        <div class="space-y-3">
+                                            <input type="file" id="member_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-emerald-600 file:text-white file:font-bold file:uppercase file:tracking-tighter">
+                                            <div class="text-center text-[10px] text-slate-600 font-bold uppercase">or</div>
+                                            <input type="text" id="member_image_url" placeholder="Paste Photo URL" class="w-full rounded-2xl px-5 py-4 text-sm">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Add to Team</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="flex-grow">
+                            <div class="glass p-10 rounded-[3rem]">
+                                <h3 class="text-2xl font-bold text-white mb-10">Team Roster</h3>
+                                <div id="teamList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <script>
@@ -360,19 +451,27 @@ app.get('/admin', (req, res) => {
                 function switchTab(tab) {
                     const projects = document.getElementById('view-projects');
                     const packages = document.getElementById('view-packages');
+                    const team = document.getElementById('view-team');
                     const tabP = document.getElementById('tab-projects');
                     const tabPkg = document.getElementById('tab-packages');
+                    const tabT = document.getElementById('tab-team');
+
+                    projects.classList.add('hidden');
+                    packages.classList.add('hidden');
+                    team.classList.add('hidden');
+                    tabP.className = 'pb-1 transition-all tab-inactive';
+                    tabPkg.className = 'pb-1 transition-all tab-inactive';
+                    tabT.className = 'pb-1 transition-all tab-inactive';
 
                     if (tab === 'projects') {
                         projects.classList.remove('hidden');
-                        packages.classList.add('hidden');
                         tabP.className = 'pb-1 transition-all tab-active';
-                        tabPkg.className = 'pb-1 transition-all tab-inactive';
-                    } else {
-                        projects.classList.add('hidden');
+                    } else if (tab === 'packages') {
                         packages.classList.remove('hidden');
-                        tabP.className = 'pb-1 transition-all tab-inactive';
                         tabPkg.className = 'pb-1 transition-all tab-active';
+                    } else if (tab === 'team') {
+                        team.classList.remove('hidden');
+                        tabT.className = 'pb-1 transition-all tab-active';
                     }
                 }
 
@@ -388,7 +487,10 @@ app.get('/admin', (req, res) => {
                                     <img src="\${p.image_url || 'https://via.placeholder.com/600x400'}" class="w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" />
                                     <div class="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest text-blue-400 border border-white/10">\${p.category}</div>
                                 </div>
-                                <h3 class="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">\${p.title}</h3>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <h3 class="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">\${p.title}</h3>
+                                    \${p.is_featured ? '<span class="text-[8px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">Featured</span>' : ''}
+                                </div>
                                 <p class="text-slate-500 text-xs line-clamp-2 mb-6 leading-relaxed font-medium">\${p.description}</p>
                                 <div class="flex justify-between items-center pt-4 border-t border-white/5">
                                     <a href="\${p.link}" target="_blank" class="text-[9px] font-extrabold text-blue-500 hover:text-white transition-colors tracking-widest uppercase">Live Demo ↗</a>
@@ -409,6 +511,7 @@ app.get('/admin', (req, res) => {
                     formData.append('description', document.getElementById('proj_description').value);
                     formData.append('link', document.getElementById('proj_link').value);
                     formData.append('image_url', document.getElementById('proj_image_url').value);
+                    formData.append('is_featured', document.getElementById('proj_featured').checked);
                     const file = document.getElementById('proj_image').files[0];
                     if(file) formData.append('image', file);
 
@@ -467,9 +570,51 @@ app.get('/admin', (req, res) => {
                     fetchPackages();
                 }
 
+                async function fetchTeam() {
+                    try {
+                        const res = await fetch('/api/team');
+                        const data = await res.json();
+                        document.getElementById('stat-team').innerText = data.length;
+                        document.getElementById('teamList').innerHTML = data.map(m => `
+                            <div class="glass bg-slate-900/30 border border-white/5 p-6 rounded-[2.5rem] flex items-center gap-6 group">
+                                <div class="w-20 h-20 rounded-2xl overflow-hidden shrink-0 border border-white/10">
+                                    <img src="\${m.image || 'https://via.placeholder.com/200'}" class="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                                </div>
+                                <div class="flex-grow">
+                                    <h4 class="font-bold text-white text-lg">\${m.name}</h4>
+                                    <p class="text-emerald-400 text-xs font-bold uppercase tracking-widest">\${m.role}</p>
+                                </div>
+                                <button onclick="deleteMember(\${m.id})" class="p-3 rounded-xl bg-red-500/5 text-red-500/30 hover:bg-red-500 hover:text-white transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        `).join('') || '<div class="py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20 italic">No members added</div>';
+                    } catch (e) { console.error(e); }
+                }
+
+                document.getElementById('teamForm').onsubmit = async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData();
+                    formData.append('name', document.getElementById('member_name').value);
+                    formData.append('role', document.getElementById('member_role').value);
+                    formData.append('image', document.getElementById('member_image_url').value);
+                    const file = document.getElementById('member_image').files[0];
+                    if(file) formData.append('image', file);
+
+                    await fetch('/api/team', { method: 'POST', body: formData });
+                    e.target.reset(); fetchTeam();
+                };
+
+                async function deleteMember(id) {
+                    if(!confirm('Remove this member?')) return;
+                    await fetch('/api/team/' + id, { method: 'DELETE' });
+                    fetchTeam();
+                }
+
                 // Initial Load
                 fetchProjects();
                 fetchPackages();
+                fetchTeam();
             </script>
         </body>
         </html>

@@ -35,7 +35,7 @@ const Footer = () => {
           <div>
             <h4 className="font-bold mb-6">Hubungi Kami</h4>
             <ul className="space-y-4 text-secondary text-sm">
-              <li className="flex gap-3"><Mail size={18} className="text-accent-primary" /> gradasiweb.com</li>
+              <li className="flex gap-3"><Mail size={18} className="text-accent-primary" /> gradasiweb@gmail.com</li>
               <li className="flex gap-3"><Phone size={18} className="text-accent-primary" /> +62 889 8351 4206</li>
               <li className="flex gap-3"><MapPin size={18} className="text-accent-primary" /> Sukoharjo, Jawa Tengah</li>
             </ul>
