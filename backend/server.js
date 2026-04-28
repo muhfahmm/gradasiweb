@@ -449,10 +449,7 @@ app.get('/admin', (req, res) => {
                         <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Team</div>
                         <div class="text-4xl font-bold text-white" id="stat-team">0</div>
                     </div>
-                    <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-blue-500/20 transition-all">
-                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Inbox</div>
-                        <div class="text-4xl font-bold text-white" id="stat-messages">0</div>
-                    </div>
+
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 bg-blue-500/5">
                         <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Status</div>
                         <div class="flex items-center gap-2">
