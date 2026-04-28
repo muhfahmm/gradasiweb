@@ -1,11 +1,20 @@
-CREATE TABLE projects (
+CREATE TABLE proyek_unggulan (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     image_url TEXT,
     link VARCHAR(255),
     category VARCHAR(100),
-    is_featured BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE proyek_terbaru (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    image_url TEXT,
+    link VARCHAR(255),
+    category VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

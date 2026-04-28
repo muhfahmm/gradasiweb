@@ -57,27 +57,6 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-// Mock Data Fallback
-let mockProjects = [
-  { id: 1, title: 'Company Profile', description: 'Modern company profile website for a law firm.', image_url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80', link: '#', category: 'Web Development', is_featured: true },
-  { id: 2, title: 'E-Commerce App', description: 'Full-featured online store with payment integration.', image_url: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=800&q=80', link: '#', category: 'Mobile App', is_featured: true },
-  { id: 3, title: 'Landing Page', description: 'High-converting landing page for a SaaS product.', image_url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80', link: '#', category: 'UI/UX Design', is_featured: true }
-];
-
-let mockPackages = [
-  { id: 1, name: 'Lite Showcase', price: 'Rp 300rb', features: 'Single Landing Page, Desain Modern, Responsive Mobile, Integrasi WhatsApp, Hosting Gratis, Revisi 1x', recommended: false },
-  { id: 2, name: 'Business Pro', price: 'Rp 1jt', features: 'Hingga 5 Halaman, Custom Domain .com, Email Bisnis, SEO Optimized, Panel Admin Lite, Support 3 Bulan', recommended: true },
-  { id: 3, name: 'Elite Enterprise', price: 'Rp 5-10jt', features: 'Sistem Kustom (E-Commerce/ERP), High-Speed Hosting, Keamanan SSL Premium, Maintenance 6 Bulan, Full Source Code, Konsultasi Gratis', recommended: false }
-];
-
-let mockTeam = [
-  { id: 1, name: 'Muflih', role: 'Founder & Full Stack Developer', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80' },
-  { id: 2, name: 'Sarah', role: 'UI/UX Designer', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80' },
-  { id: 3, name: 'Alex', role: 'Project Manager', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80' }
-];
-
-let mockAdmins = [];
-
 // Auth Routes
 app.post('/api/auth/register', async (req, res) => {
   const { username, password } = req.body;
@@ -89,37 +68,29 @@ app.post('/api/auth/register', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("DB Register Error, using mock:", err.message);
-    const newUser = { id: Date.now(), username, password: hashedPassword };
-    mockAdmins.push(newUser);
-    res.status(201).json({ id: newUser.id, username: newUser.username });
+    console.error("DB Register Error:", err.message);
+    res.status(500).json({ message: 'Gagal mendaftar ke database' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  let user;
-  
   try {
     const result = await pool.query('SELECT * FROM admins WHERE username = $1', [username]);
-    if (result.rows.length > 0) {
-      user = result.rows[0];
-    } else {
-      user = mockAdmins.find(u => u.username === username);
-    }
+    const user = result.rows[0];
+
+    if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+    const validPass = await bcrypt.compare(password, user.password);
+    if (!validPass) return res.status(400).json({ message: 'Password salah' });
+
+    const token = jwt.sign({ id: user.id, username: user.username, avatar_url: user.avatar_url }, JWT_SECRET, { expiresIn: '1d' });
+    res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
+    res.json({ token, user: { id: user.id, username: user.username, avatar_url: user.avatar_url } });
   } catch (err) {
-    console.error("DB Login Error, using mock:", err.message);
-    user = mockAdmins.find(u => u.username === username);
+    console.error("DB Login Error:", err.message);
+    res.status(500).json({ message: 'Database Error' });
   }
-
-  if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
-
-  const validPass = await bcrypt.compare(password, user.password);
-  if (!validPass) return res.status(400).json({ message: 'Password salah' });
-
-  const token = jwt.sign({ id: user.id, username: user.username, avatar_url: user.avatar_url }, JWT_SECRET, { expiresIn: '1d' });
-  res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
-  res.json({ token, user: { id: user.id, username: user.username, avatar_url: user.avatar_url } });
 });
 
 // Profile Pic API
@@ -129,9 +100,7 @@ app.post('/api/auth/profile-pic', verifyToken, upload.single('avatar'), async (r
     await pool.query('UPDATE admins SET avatar_url = $1 WHERE id = $2', [avatar_url, req.user.id]);
     res.json({ avatar_url });
   } catch (err) {
-    const admin = mockAdmins.find(u => u.id == req.user.id);
-    if(admin) admin.avatar_url = avatar_url;
-    res.json({ avatar_url });
+    res.status(500).json({ message: 'DB Error' });
   }
 });
 
@@ -140,9 +109,7 @@ app.delete('/api/auth/profile-pic', verifyToken, async (req, res) => {
     await pool.query('UPDATE admins SET avatar_url = NULL WHERE id = $1', [req.user.id]);
     res.json({ success: true });
   } catch (err) {
-    const admin = mockAdmins.find(u => u.id == req.user.id);
-    if(admin) admin.avatar_url = null;
-    res.json({ success: true });
+    res.status(500).json({ message: 'DB Error' });
   }
 });
 
@@ -151,40 +118,71 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Logged out' });
 });
 
-// API Routes
-app.get('/api/projects', async (req, res) => {
+// Projects API (Unggulan)
+app.get('/api/projects/featured', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
+    const result = await pool.query('SELECT * FROM proyek_unggulan ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
-    res.json(mockProjects);
+    res.json([]);
   }
 });
 
-app.post('/api/projects', verifyToken, upload.single('image'), async (req, res) => {
-  const { title, description, link, category, is_featured } = req.body;
+app.post('/api/projects/featured', verifyToken, upload.single('image'), async (req, res) => {
+  const { title, description, link, category } = req.body;
   const image_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image_url || '';
   try {
     const result = await pool.query(
-      'INSERT INTO projects (title, description, image_url, link, category, is_featured) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [title, description, image_url, link, category, is_featured === 'true' || is_featured === true]
+      'INSERT INTO proyek_unggulan (title, description, image_url, link, category) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [title, description, image_url, link, category]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    const newProj = { id: Date.now(), title, description, image_url, link, category, is_featured: is_featured === 'true' || is_featured === true };
-    mockProjects.push(newProj);
-    res.status(201).json(newProj);
+    res.status(500).json({ message: 'DB Error' });
   }
 });
 
-app.delete('/api/projects/:id', verifyToken, async (req, res) => {
+app.delete('/api/projects/featured/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
-    await pool.query('DELETE FROM projects WHERE id = $1', [id]);
+    await pool.query('DELETE FROM proyek_unggulan WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    mockProjects = mockProjects.filter(p => p.id != id);
+    res.status(500).send();
+  }
+});
+
+// Projects API (Terbaru)
+app.get('/api/projects/latest', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM proyek_terbaru ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+app.post('/api/projects/latest', verifyToken, upload.single('image'), async (req, res) => {
+  const { title, description, link, category } = req.body;
+  const image_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image_url || '';
+  try {
+    const result = await pool.query(
+      'INSERT INTO proyek_terbaru (title, description, image_url, link, category) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [title, description, image_url, link, category]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'DB Error' });
+  }
+});
+
+app.delete('/api/projects/latest/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM proyek_terbaru WHERE id = $1', [id]);
     res.status(204).send();
+  } catch (err) {
+    res.status(500).send();
   }
 });
 
@@ -194,7 +192,7 @@ app.get('/api/packages', async (req, res) => {
     const result = await pool.query('SELECT * FROM packages ORDER BY id ASC');
     res.json(result.rows);
   } catch (err) {
-    res.json(mockPackages);
+    res.json([]);
   }
 });
 
@@ -207,9 +205,7 @@ app.post('/api/packages', verifyToken, async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    const newPkg = { id: Date.now(), name, price, features, recommended };
-    mockPackages.push(newPkg);
-    res.status(201).json(newPkg);
+    res.status(500).json({ message: 'DB Error' });
   }
 });
 
@@ -219,8 +215,7 @@ app.delete('/api/packages/:id', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM packages WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    mockPackages = mockPackages.filter(p => p.id != id);
-    res.status(204).send();
+    res.status(500).send();
   }
 });
 
@@ -230,7 +225,7 @@ app.get('/api/team', async (req, res) => {
     const result = await pool.query('SELECT * FROM team ORDER BY id ASC');
     res.json(result.rows);
   } catch (err) {
-    res.json(mockTeam);
+    res.json([]);
   }
 });
 
@@ -244,9 +239,7 @@ app.post('/api/team', verifyToken, upload.single('image'), async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    const newMember = { id: Date.now(), name, role, image };
-    mockTeam.push(newMember);
-    res.status(201).json(newMember);
+    res.status(500).json({ message: 'DB Error' });
   }
 });
 
@@ -256,8 +249,7 @@ app.delete('/api/team/:id', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM team WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    mockTeam = mockTeam.filter(m => m.id != id);
-    res.status(204).send();
+    res.status(500).send();
   }
 });
 
@@ -371,7 +363,8 @@ app.get('/admin', (req, res) => {
                     </div>
                     
                     <div class="flex gap-10 text-sm font-semibold uppercase tracking-widest">
-                        <button onclick="switchTab('projects')" id="tab-projects" class="pb-1 transition-all tab-active hover:text-blue-300">Projects</button>
+                        <button onclick="switchTab('unggulan')" id="tab-unggulan" class="pb-1 transition-all tab-active hover:text-blue-300">Unggulan</button>
+                        <button onclick="switchTab('terbaru')" id="tab-terbaru" class="pb-1 transition-all tab-inactive hover:text-blue-300">Terbaru</button>
                         <button onclick="switchTab('packages')" id="tab-packages" class="pb-1 transition-all tab-inactive hover:text-blue-300">Packages</button>
                         <button onclick="switchTab('team')" id="tab-team" class="pb-1 transition-all tab-inactive hover:text-blue-300">Team</button>
                         <a href="http://localhost:1001/gradasiweb/" target="_blank" class="text-slate-500 hover:text-white transition-colors flex items-center gap-2">
@@ -399,85 +392,92 @@ app.get('/admin', (req, res) => {
 
             <div class="max-w-7xl mx-auto px-8">
                 <!-- Overview Cards -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-12">
+                    <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-amber-500/20 transition-all group">
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Unggulan</div>
+                        <div class="text-4xl font-bold gradient-text" id="stat-unggulan">0</div>
+                    </div>
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-blue-500/20 transition-all group">
-                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Live Projects</div>
-                        <div class="text-4xl font-bold gradient-text" id="stat-projects">0</div>
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Terbaru</div>
+                        <div class="text-4xl font-bold text-white" id="stat-terbaru">0</div>
                     </div>
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-purple-500/20 transition-all">
-                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Service Tiers</div>
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Packages</div>
                         <div class="text-4xl font-bold text-white" id="stat-packages">0</div>
                     </div>
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-emerald-500/20 transition-all">
-                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Team Members</div>
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Team</div>
                         <div class="text-4xl font-bold text-white" id="stat-team">0</div>
                     </div>
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 bg-blue-500/5">
-                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Server Status</div>
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Status</div>
                         <div class="flex items-center gap-2">
                             <div class="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
-                            <span class="text-sm font-bold text-green-400 uppercase tracking-widest">Operational</span>
+                            <span class="text-[10px] font-bold text-green-400 uppercase tracking-widest">Active</span>
                         </div>
-                    </div>
-                    <div class="glass p-7 rounded-[2.5rem] border-white/5">
-                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">System Time</div>
-                        <div class="text-sm font-bold text-slate-300 uppercase tracking-widest" id="live-clock">00:00:00</div>
                     </div>
                 </div>
 
-                <!-- PROJECT VIEW -->
-                <div id="view-projects" class="animate-in fade-in duration-500">
+                <!-- UNGGULAN VIEW -->
+                <div id="view-unggulan" class="animate-in fade-in duration-500">
                     <div class="flex flex-col xl:flex-row gap-10">
-                        <!-- Form Side -->
                         <div class="xl:w-[400px] shrink-0">
                             <div class="glass p-8 rounded-[3rem] sticky top-32">
                                 <h3 class="text-xl font-bold mb-8 text-white flex items-center gap-3">
-                                    <span class="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">+</span>
-                                    New Showcase
+                                    <span class="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">⭐</span>
+                                    Proyek Unggulan
                                 </h3>
-                                <form id="projectForm" class="space-y-6">
+                                <form id="unggulanForm" class="space-y-6">
                                     <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Project Title</label>
-                                        <input type="text" id="proj_title" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="e.g. Modern E-Commerce" required>
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Title</label>
+                                        <input type="text" id="u_title" class="w-full rounded-2xl px-5 py-4 text-sm" required>
                                     </div>
                                     <div class="space-y-2">
                                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Category</label>
-                                        <input type="text" id="proj_category" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="Web Development" required>
+                                        <input type="text" id="u_category" class="w-full rounded-2xl px-5 py-4 text-sm" required>
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Visual Media</label>
-                                        <div class="space-y-3">
-                                            <input type="file" id="proj_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-600 file:text-white file:font-bold file:uppercase file:tracking-tighter">
-                                            <div class="text-center text-[10px] text-slate-600 font-bold uppercase">or</div>
-                                            <input type="text" id="proj_image_url" placeholder="Paste Image URL" class="w-full rounded-2xl px-5 py-4 text-sm">
-                                        </div>
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Image</label>
+                                        <input type="file" id="u_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px]">
                                     </div>
-                                    <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Live Link</label>
-                                        <input type="text" id="proj_link" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="https://...">
-                                    </div>
-                                    <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Summary</label>
-                                        <textarea id="proj_description" rows="3" class="w-full rounded-2xl px-5 py-4 text-sm resize-none" placeholder="Explain the project impact..." required></textarea>
-                                    </div>
-                                    <div class="flex items-center justify-between p-5 bg-slate-900/40 rounded-2xl border border-white/5">
-                                        <label for="proj_featured" class="text-xs font-bold text-slate-400 uppercase tracking-wider">Show in Home (Featured)</label>
-                                        <input type="checkbox" id="proj_featured" class="w-6 h-6 rounded-lg accent-blue-600">
-                                    </div>
-                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white shadow-xl">Deploy Project</button>
+                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Unggulan</button>
                                 </form>
                             </div>
                         </div>
-                        
-                        <!-- List Side -->
                         <div class="flex-grow">
-                            <div class="glass p-10 rounded-[3rem]">
-                                <div class="flex justify-between items-center mb-10">
-                                    <h3 class="text-2xl font-bold text-white">Active Portfolio</h3>
-                                    <div class="text-xs text-slate-500 font-medium">Sorted by: Newest First</div>
-                                </div>
-                                <div id="projectList" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
+                            <div id="featuredList" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TERBARU VIEW -->
+                <div id="view-terbaru" class="hidden animate-in fade-in duration-500">
+                    <div class="flex flex-col xl:flex-row gap-10">
+                        <div class="xl:w-[400px] shrink-0">
+                            <div class="glass p-8 rounded-[3rem] sticky top-32">
+                                <h3 class="text-xl font-bold mb-8 text-white flex items-center gap-3">
+                                    <span class="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">✨</span>
+                                    Proyek Terbaru
+                                </h3>
+                                <form id="terbaruForm" class="space-y-6">
+                                    <div class="space-y-2">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Title</label>
+                                        <input type="text" id="t_title" class="w-full rounded-2xl px-5 py-4 text-sm" required>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Category</label>
+                                        <input type="text" id="t_category" class="w-full rounded-2xl px-5 py-4 text-sm" required>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Image</label>
+                                        <input type="file" id="t_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px]">
+                                    </div>
+                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Terbaru</button>
+                                </form>
                             </div>
+                        </div>
+                        <div class="flex-grow">
+                            <div id="latestList" class="grid grid-cols-1 md:grid-cols-2 gap-8"></div>
                         </div>
                     </div>
                 </div>
@@ -594,30 +594,13 @@ app.get('/admin', (req, res) => {
 
                 // Tab Switcher
                 function switchTab(tab) {
-                    const projects = document.getElementById('view-projects');
-                    const packages = document.getElementById('view-packages');
-                    const team = document.getElementById('view-team');
-                    const tabP = document.getElementById('tab-projects');
-                    const tabPkg = document.getElementById('tab-packages');
-                    const tabT = document.getElementById('tab-team');
-
-                    projects.classList.add('hidden');
-                    packages.classList.add('hidden');
-                    team.classList.add('hidden');
-                    tabP.className = 'pb-1 transition-all tab-inactive';
-                    tabPkg.className = 'pb-1 transition-all tab-inactive';
-                    tabT.className = 'pb-1 transition-all tab-inactive';
-
-                    if (tab === 'projects') {
-                        projects.classList.remove('hidden');
-                        tabP.className = 'pb-1 transition-all tab-active';
-                    } else if (tab === 'packages') {
-                        packages.classList.remove('hidden');
-                        tabPkg.className = 'pb-1 transition-all tab-active';
-                    } else if (tab === 'team') {
-                        team.classList.remove('hidden');
-                        tabT.className = 'pb-1 transition-all tab-active';
-                    }
+                    const views = ['unggulan', 'terbaru', 'packages', 'team'];
+                    views.forEach(v => {
+                        document.getElementById('view-' + v).classList.add('hidden');
+                        document.getElementById('tab-' + v).className = 'pb-1 transition-all tab-inactive';
+                    });
+                    document.getElementById('view-' + tab).classList.remove('hidden');
+                    document.getElementById('tab-' + tab).className = 'pb-1 transition-all tab-active';
                 }
 
                 function toggleProfileModal() {
@@ -654,50 +637,59 @@ app.get('/admin', (req, res) => {
                 // Data Handling
                 async function fetchProjects() {
                     try {
-                        const res = await fetch('/api/projects');
-                        const data = await res.json();
-                        document.getElementById('stat-projects').innerText = data.length;
-                        document.getElementById('projectList').innerHTML = data.map(p => \`
+                        const resF = await fetch('/api/projects/featured');
+                        const dataF = await resF.json();
+                        const resL = await fetch('/api/projects/latest');
+                        const dataL = await resL.json();
+                        
+                        document.getElementById('stat-unggulan').innerText = dataF.length;
+                        document.getElementById('stat-terbaru').innerText = dataL.length;
+                        
+                        const renderItem = (p, type) => \`
                             <div class="glass bg-slate-900/30 border border-white/5 p-6 rounded-[2.5rem] group hover:border-blue-500/30 transition-all overflow-hidden relative">
                                 <div class="relative h-44 rounded-[1.5rem] bg-slate-800 overflow-hidden mb-5">
                                     <img src="\${p.image_url || 'https://via.placeholder.com/600x400'}" class="w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" />
                                     <div class="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest text-blue-400 border border-white/10">\${p.category}</div>
                                 </div>
-                                <div class="flex items-center gap-2 mb-2">
-                                    <h3 class="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">\${p.title}</h3>
-                                    \${p.is_featured ? '<span class="text-[8px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">Featured</span>' : ''}
-                                </div>
-                                <p class="text-slate-500 text-xs line-clamp-2 mb-6 leading-relaxed font-medium">\${p.description}</p>
+                                <h3 class="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">\${p.title}</h3>
                                 <div class="flex justify-between items-center pt-4 border-t border-white/5">
-                                    <a href="\${p.link}" target="_blank" class="text-[9px] font-extrabold text-blue-500 hover:text-white transition-colors tracking-widest uppercase">Live Demo ↗</a>
-                                    <button onclick="deleteProject(\${p.id})" class="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    <button onclick="deleteProject(\${p.id}, '\${type}')" class="w-full py-2 rounded-xl bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                                        Delete Project
                                     </button>
                                 </div>
                             </div>
-                        \`).join('') || '<div class="col-span-full py-20 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">Archive Empty</div>';
+                        \`;
+
+                        document.getElementById('featuredList').innerHTML = dataF.map(p => renderItem(p, 'featured')).join('') || '<div class="col-span-full py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No featured projects</div>';
+                        document.getElementById('latestList').innerHTML = dataL.map(p => renderItem(p, 'latest')).join('') || '<div class="col-span-full py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No latest projects</div>';
                     } catch (e) { console.error(e); }
                 }
 
-                document.getElementById('projectForm').onsubmit = async (e) => {
+                document.getElementById('unggulanForm').onsubmit = async (e) => {
                     e.preventDefault();
                     const formData = new FormData();
-                    formData.append('title', document.getElementById('proj_title').value);
-                    formData.append('category', document.getElementById('proj_category').value);
-                    formData.append('description', document.getElementById('proj_description').value);
-                    formData.append('link', document.getElementById('proj_link').value);
-                    formData.append('image_url', document.getElementById('proj_image_url').value);
-                    formData.append('is_featured', document.getElementById('proj_featured').checked);
-                    const file = document.getElementById('proj_image').files[0];
+                    formData.append('title', document.getElementById('u_title').value);
+                    formData.append('category', document.getElementById('u_category').value);
+                    const file = document.getElementById('u_image').files[0];
                     if(file) formData.append('image', file);
-
-                    await fetch('/api/projects', { method: 'POST', body: formData });
+                    await fetch('/api/projects/featured', { method: 'POST', body: formData });
                     e.target.reset(); fetchProjects();
                 };
 
-                async function deleteProject(id) {
+                document.getElementById('terbaruForm').onsubmit = async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData();
+                    formData.append('title', document.getElementById('t_title').value);
+                    formData.append('category', document.getElementById('t_category').value);
+                    const file = document.getElementById('t_image').files[0];
+                    if(file) formData.append('image', file);
+                    await fetch('/api/projects/latest', { method: 'POST', body: formData });
+                    e.target.reset(); fetchProjects();
+                };
+
+                async function deleteProject(id, type) {
                     if(!confirm('Archive this project permanentely?')) return;
-                    await fetch('/api/projects/' + id, { method: 'DELETE' });
+                    await fetch(\`/api/projects/\${type}/\${id}\`, { method: 'DELETE' });
                     fetchProjects();
                 }
 
