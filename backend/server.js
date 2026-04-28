@@ -1,14 +1,16 @@
-const path = require('path');
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const { Pool } = require('pg');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
-const multer = require('multer');
 const fs = require('fs');
+const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const nodemailer = require('nodemailer');
+
+// Load ENV from absolute path
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const uploadDir = path.join(__dirname, 'uploads');
@@ -56,6 +58,16 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'db_gradasiweb',
   password: process.env.DB_PASSWORD || '',
   port: process.env.DB_PORT || 5432,
+});
+
+// Test Connection
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error("❌ DATABASE CONNECTION FAILED:", err.message);
+    console.warn("⚠️  Using Mock Mode (Data NOT saved to PostgreSQL)");
+  } else {
+    console.log("✅ DATABASE CONNECTED SUCCESSFULLY (PostgreSQL)");
+  }
 });
 
 // Mock Data Fallback
