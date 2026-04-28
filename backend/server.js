@@ -8,6 +8,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const uploadDir = path.join(__dirname, 'uploads');
@@ -63,6 +64,16 @@ let mockProyekTerbaru = [];
 let mockPackages = [];
 let mockTeam = [];
 let mockAdmins = [];
+let mockMessages = [];
+
+// Nodemailer Config
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 // Auth Routes
 app.post('/api/auth/register', async (req, res) => {
@@ -198,7 +209,102 @@ app.delete('/api/projects/latest/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Packages API
+// Messages API
+app.get('/api/messages', verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM messages ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.json(mockMessages);
+  }
+});
+
+app.post('/api/contact', async (req, res) => {
+  const { name, email, subject, message } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO messages (name, email, subject, message) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, email, subject, message]
+    );
+
+    // Kirim notifikasi ke email admin jika kredensial sudah diatur
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      transporter.sendMail({
+        from: `"GRADASIWEB SYSTEM" <${process.env.EMAIL_USER}>`,
+        to: 'gradasiweb@gmail.com', // Email tujuan admin
+        subject: `[PESAN BARU] ${name} - ${subject}`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+            <h2 style="color: #2563eb;">Pesan Baru dari Website!</h2>
+            <p>Seseorang telah mengirim pesan melalui formulir kontak:</p>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr><td style="font-weight: bold; padding: 5px 0;">Nama:</td><td>${name}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px 0;">Email:</td><td>${email}</td></tr>
+              <tr><td style="font-weight: bold; padding: 5px 0;">Subjek:</td><td>${subject}</td></tr>
+            </table>
+            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-top: 15px;">
+              <p style="margin: 0; font-style: italic;">"${message}"</p>
+            </div>
+            <p style="margin-top: 20px;">
+              <a href="http://localhost:1001/admin" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Buka Admin Dashboard</a>
+            </p>
+          </div>
+        `
+      }).catch(e => console.log("Notif Admin Error:", e.message));
+    }
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    const newMessage = { id: Date.now(), name, email, subject, message, is_read: false, created_at: new Date() };
+    mockMessages.push(newMessage);
+    res.status(201).json(newMessage);
+  }
+});
+
+app.post('/api/messages/:id/reply', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { reply_content } = req.body;
+  try {
+    const msgResult = await pool.query('SELECT * FROM messages WHERE id = $1', [id]);
+    const msg = msgResult.rows[0];
+    
+    if (msg) {
+      // Send Email
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: msg.email,
+        subject: `Re: ${msg.subject || 'Kontak Gradasiweb'}`,
+        text: reply_content
+      });
+
+      await pool.query(
+        'UPDATE messages SET reply_content = $1, replied_at = CURRENT_TIMESTAMP, is_read = true WHERE id = $2',
+        [reply_content, id]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Reply Error:", err);
+    // Mock update
+    const mockIdx = mockMessages.findIndex(m => m.id == id);
+    if (mockIdx !== -1) {
+       mockMessages[mockIdx].reply_content = reply_content;
+       mockMessages[mockIdx].is_read = true;
+    }
+    res.json({ success: true, warning: 'Sent via Mock (Email not sent without ENV)' });
+  }
+});
+
+app.delete('/api/messages/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM messages WHERE id = $1', [id]);
+    res.status(204).send();
+  } catch (err) {
+    mockMessages = mockMessages.filter(m => m.id != id);
+    res.status(204).send();
+  }
+});
 app.get('/api/packages', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM packages ORDER BY id ASC');
@@ -382,6 +488,10 @@ app.get('/admin', (req, res) => {
                         <button onclick="switchTab('terbaru')" id="tab-terbaru" class="pb-1 transition-all tab-inactive hover:text-blue-300">Terbaru</button>
                         <button onclick="switchTab('packages')" id="tab-packages" class="pb-1 transition-all tab-inactive hover:text-blue-300">Packages</button>
                         <button onclick="switchTab('team')" id="tab-team" class="pb-1 transition-all tab-inactive hover:text-blue-300">Team</button>
+                        <button onclick="switchTab('messages')" id="tab-messages" class="pb-1 transition-all tab-inactive hover:text-blue-300 flex items-center gap-2">
+                            Messages
+                            <span id="nav-msg-count" class="hidden w-4 h-4 bg-blue-500 rounded-full text-[8px] flex items-center justify-center text-white">0</span>
+                        </button>
                         <a href="http://localhost:1001/gradasiweb/" target="_blank" class="text-slate-500 hover:text-white transition-colors flex items-center gap-2">
                             View Site <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                         </a>
@@ -423,6 +533,10 @@ app.get('/admin', (req, res) => {
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-emerald-500/20 transition-all">
                         <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Team</div>
                         <div class="text-4xl font-bold text-white" id="stat-team">0</div>
+                    </div>
+                    <div class="glass p-7 rounded-[2.5rem] border-white/5 hover:border-blue-500/20 transition-all">
+                        <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Inbox</div>
+                        <div class="text-4xl font-bold text-white" id="stat-messages">0</div>
                     </div>
                     <div class="glass p-7 rounded-[2.5rem] border-white/5 bg-blue-500/5">
                         <div class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Status</div>
@@ -592,6 +706,19 @@ app.get('/admin', (req, res) => {
                         </div>
                     </div>
                 </div>
+
+                <!-- MESSAGES VIEW -->
+                <div id="view-messages" class="hidden animate-in fade-in duration-500">
+                    <div class="glass p-10 rounded-[3rem]">
+                        <div class="flex justify-between items-center mb-10">
+                            <h3 class="text-2xl font-bold text-white">Client Inquiries</h3>
+                            <div class="px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[10px] font-black uppercase text-blue-400 tracking-widest">
+                                Inbox Real-time
+                            </div>
+                        </div>
+                        <div id="messageList" class="space-y-6"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- PROFILE MODAL -->
@@ -619,6 +746,26 @@ app.get('/admin', (req, res) => {
                 </div>
             </div>
 
+            <!-- REPLY MODAL -->
+            <div id="replyModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center px-4">
+                <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeReplyModal()"></div>
+                <div class="glass max-w-2xl w-full p-10 rounded-[3rem] relative animate-in zoom-in duration-300">
+                    <h3 class="text-2xl font-bold text-white mb-2">Reply to Client</h3>
+                    <p id="reply-to-email" class="text-sm text-slate-500 mb-8 font-medium italic"></p>
+                    <div class="space-y-6">
+                        <div class="p-6 bg-slate-900/50 rounded-2xl border border-white/5">
+                            <div class="text-[10px] font-black uppercase text-slate-600 mb-3 tracking-widest">Original Message</div>
+                            <p id="original-msg" class="text-sm text-slate-300 italic"></p>
+                        </div>
+                        <textarea id="reply_content" rows="6" class="w-full rounded-2xl px-6 py-5 text-sm" placeholder="Write your professional response here..."></textarea>
+                        <input type="hidden" id="reply-msg-id">
+                        <button onclick="submitReply()" id="btn-send-reply" class="w-full py-4 gradient-bg rounded-2xl font-bold text-white shadow-xl shadow-blue-500/20 hover:scale-[1.02] transition-all">
+                            Send Reply to Gmail
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <script>
                 // Clock
                 setInterval(() => {
@@ -627,13 +774,24 @@ app.get('/admin', (req, res) => {
 
                 // Tab Switcher
                 function switchTab(tab) {
-                    const views = ['unggulan', 'terbaru', 'packages', 'team'];
+                    const views = ['unggulan', 'terbaru', 'packages', 'team', 'messages'];
                     views.forEach(v => {
-                        document.getElementById('view-' + v).classList.add('hidden');
-                        document.getElementById('tab-' + v).className = 'pb-1 transition-all tab-inactive';
+                        const viewEl = document.getElementById('view-' + v);
+                        const tabEl = document.getElementById('tab-' + v);
+                        if (viewEl) viewEl.classList.add('hidden');
+                        if (tabEl) {
+                            tabEl.classList.remove('tab-active');
+                            tabEl.classList.add('tab-inactive');
+                        }
                     });
-                    document.getElementById('view-' + tab).classList.remove('hidden');
-                    document.getElementById('tab-' + tab).className = 'pb-1 transition-all tab-active';
+                    
+                    const activeView = document.getElementById('view-' + tab);
+                    const activeTab = document.getElementById('tab-' + tab);
+                    if (activeView) activeView.classList.remove('hidden');
+                    if (activeTab) {
+                        activeTab.classList.remove('tab-inactive');
+                        activeTab.classList.add('tab-active');
+                    }
                 }
 
                 let currentFeatures = [];
@@ -852,13 +1010,109 @@ app.get('/admin', (req, res) => {
                 async function deleteMember(id) {
                     if(!confirm('Remove this member?')) return;
                     await fetch('/api/team/' + id, { method: 'DELETE' });
-                    fetchTeam();
+                    fetchTeam(); fetchMessages();
                 }
 
-                // Initial Load
+                async function fetchMessages() {
+                    try {
+                        const res = await fetch('/api/messages');
+                        const data = await res.json();
+                        document.getElementById('stat-messages').innerText = data.length;
+                        
+                        const unread = data.filter(m => !m.is_read).length;
+                        const navCount = document.getElementById('nav-msg-count');
+                        if(unread > 0) {
+                            navCount.innerText = unread;
+                            navCount.classList.remove('hidden');
+                        } else {
+                            navCount.classList.add('hidden');
+                        }
+
+                        document.getElementById('messageList').innerHTML = data.map(m => \`
+                            <div class="glass bg-slate-900/30 border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-start gap-8 group">
+                                <div class="flex-grow">
+                                    <div class="flex items-center gap-4 mb-4">
+                                        <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 font-bold">
+                                            \${m.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-white">\${m.name}</h4>
+                                            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">\${m.email}</p>
+                                        </div>
+                                        \${m.reply_content ? '<span class="text-[8px] bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full font-bold uppercase tracking-widest ml-2">Replied</span>' : ''}
+                                    </div>
+                                    <div class="text-sm font-bold text-slate-300 mb-2">\${m.subject || 'No Subject'}</div>
+                                    <p class="text-sm text-slate-500 leading-relaxed italic">"\${m.message}"</p>
+                                    
+                                    \${m.reply_content ? \`
+                                        <div class="mt-6 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                                            <div class="text-[8px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Your Reply</div>
+                                            <p class="text-xs text-slate-400">\${m.reply_content}</p>
+                                        </div>
+                                    \` : ''}
+                                </div>
+                                <div class="flex gap-3 shrink-0">
+                                    \${!m.reply_content ? \`
+                                        <button onclick="openReplyModal(\${m.id}, '\${m.email}', this.dataset.msg)" data-msg="\${m.message.replace(/"/g, '&quot;')}" class="px-6 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:scale-105 transition-all">Reply via Email</button>
+                                    \` : ''}
+                                    <button onclick="deleteMessage(\${m.id})" class="p-3 rounded-xl bg-red-500/5 text-red-500/30 hover:bg-red-500 hover:text-white transition-all">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        \`).join('') || '<div class="py-20 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">Your inbox is empty</div>';
+                    } catch (e) { console.error(e); }
+                }
+
+                function openReplyModal(id, email, message) {
+                    document.getElementById('reply-msg-id').value = id;
+                    document.getElementById('reply-to-email').innerText = 'To: ' + email;
+                    document.getElementById('original-msg').innerText = '"' + message + '"';
+                    document.getElementById('replyModal').classList.remove('hidden');
+                }
+
+                function closeReplyModal() {
+                    document.getElementById('replyModal').classList.add('hidden');
+                    document.getElementById('reply_content').value = '';
+                }
+
+                async function submitReply() {
+                    const id = document.getElementById('reply-msg-id').value;
+                    const reply_content = document.getElementById('reply_content').value;
+                    if(!reply_content) return alert('Reply content cannot be empty');
+                    
+                    const btn = document.getElementById('btn-send-reply');
+                    btn.disabled = true;
+                    btn.innerText = 'Sending to Gmail...';
+
+                    try {
+                        const res = await fetch(\`/api/messages/\${id}/reply\`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reply_content })
+                        });
+                        const data = await res.json();
+                        if(data.warning) alert(data.warning);
+                        closeReplyModal();
+                        fetchMessages();
+                    } catch (e) {
+                        alert('Error sending reply');
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = 'Send Reply to Gmail';
+                    }
+                }
+
+                async function deleteMessage(id) {
+                    if(!confirm('Delete this message?')) return;
+                    await fetch('/api/messages/' + id, { method: 'DELETE' });
+                    fetchMessages();
+                }
+
                 fetchProjects();
                 fetchPackages();
                 fetchTeam();
+                fetchMessages();
             </script>
         </body>
         </html>
