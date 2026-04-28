@@ -57,6 +57,13 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
+// Mock Data Fallback
+let mockProyekUnggulan = [];
+let mockProyekTerbaru = [];
+let mockPackages = [];
+let mockTeam = [];
+let mockAdmins = [];
+
 // Auth Routes
 app.post('/api/auth/register', async (req, res) => {
   const { username, password } = req.body;
@@ -68,29 +75,32 @@ app.post('/api/auth/register', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("DB Register Error:", err.message);
-    res.status(500).json({ message: 'Gagal mendaftar ke database' });
+    console.warn("DB Offline - Registering to Mock Storage");
+    const newUser = { id: Date.now(), username, password: hashedPassword, avatar_url: null };
+    mockAdmins.push(newUser);
+    res.status(201).json({ id: newUser.id, username: newUser.username });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
+  let user;
   try {
     const result = await pool.query('SELECT * FROM admins WHERE username = $1', [username]);
-    const user = result.rows[0];
-
-    if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
-
-    const validPass = await bcrypt.compare(password, user.password);
-    if (!validPass) return res.status(400).json({ message: 'Password salah' });
-
-    const token = jwt.sign({ id: user.id, username: user.username, avatar_url: user.avatar_url }, JWT_SECRET, { expiresIn: '1d' });
-    res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
-    res.json({ token, user: { id: user.id, username: user.username, avatar_url: user.avatar_url } });
+    user = result.rows[0];
   } catch (err) {
-    console.error("DB Login Error:", err.message);
-    res.status(500).json({ message: 'Database Error' });
+    console.warn("DB Offline - Checking Mock Storage");
+    user = mockAdmins.find(u => u.username === username);
   }
+
+  if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+  const validPass = await bcrypt.compare(password, user.password);
+  if (!validPass) return res.status(400).json({ message: 'Password salah' });
+
+  const token = jwt.sign({ id: user.id, username: user.username, avatar_url: user.avatar_url }, JWT_SECRET, { expiresIn: '1d' });
+  res.cookie('token', token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
+  res.json({ token, user: { id: user.id, username: user.username, avatar_url: user.avatar_url } });
 });
 
 // Profile Pic API
@@ -118,13 +128,12 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Logged out' });
 });
 
-// Projects API (Unggulan)
 app.get('/api/projects/featured', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM proyek_unggulan ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
-    res.json([]);
+    res.json(mockProyekUnggulan);
   }
 });
 
@@ -138,7 +147,9 @@ app.post('/api/projects/featured', verifyToken, upload.single('image'), async (r
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: 'DB Error' });
+    const newItem = { id: Date.now(), title, description, image_url, link, category };
+    mockProyekUnggulan.push(newItem);
+    res.status(201).json(newItem);
   }
 });
 
@@ -148,7 +159,8 @@ app.delete('/api/projects/featured/:id', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM proyek_unggulan WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    res.status(500).send();
+    mockProyekUnggulan = mockProyekUnggulan.filter(i => i.id != id);
+    res.status(204).send();
   }
 });
 
@@ -192,7 +204,7 @@ app.get('/api/packages', async (req, res) => {
     const result = await pool.query('SELECT * FROM packages ORDER BY id ASC');
     res.json(result.rows);
   } catch (err) {
-    res.json([]);
+    res.json(mockPackages);
   }
 });
 
@@ -205,7 +217,9 @@ app.post('/api/packages', verifyToken, async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: 'DB Error' });
+    const newItem = { id: Date.now(), name, price, features, recommended };
+    mockPackages.push(newItem);
+    res.status(201).json(newItem);
   }
 });
 
@@ -215,7 +229,8 @@ app.delete('/api/packages/:id', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM packages WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    res.status(500).send();
+    mockPackages = mockPackages.filter(i => i.id != id);
+    res.status(204).send();
   }
 });
 
@@ -437,8 +452,12 @@ app.get('/admin', (req, res) => {
                                         <input type="text" id="u_category" class="w-full rounded-2xl px-5 py-4 text-sm" required>
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Image</label>
-                                        <input type="file" id="u_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px]">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Visual Media</label>
+                                        <div class="space-y-3">
+                                            <input type="file" id="u_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-amber-600 file:text-white file:font-bold file:uppercase file:tracking-tighter">
+                                            <div class="text-center text-[10px] text-slate-600 font-bold uppercase">or</div>
+                                            <input type="text" id="u_image_url" placeholder="Paste Image URL" class="w-full rounded-2xl px-5 py-4 text-sm">
+                                        </div>
                                     </div>
                                     <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Unggulan</button>
                                 </form>
@@ -469,8 +488,12 @@ app.get('/admin', (req, res) => {
                                         <input type="text" id="t_category" class="w-full rounded-2xl px-5 py-4 text-sm" required>
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Image</label>
-                                        <input type="file" id="t_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px]">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Visual Media</label>
+                                        <div class="space-y-3">
+                                            <input type="file" id="t_image" accept="image/*" class="w-full rounded-2xl px-4 py-3 text-[10px] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-600 file:text-white file:font-bold file:uppercase file:tracking-tighter">
+                                            <div class="text-center text-[10px] text-slate-600 font-bold uppercase">or</div>
+                                            <input type="text" id="t_image_url" placeholder="Paste Image URL" class="w-full rounded-2xl px-5 py-4 text-sm">
+                                        </div>
                                     </div>
                                     <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Terbaru</button>
                                 </form>
@@ -497,12 +520,22 @@ app.get('/admin', (req, res) => {
                                         <input type="text" id="pkg_name" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="e.g. Enterprise" required>
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Price Label</label>
-                                        <input type="text" id="pkg_price" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="e.g. Rp 10jt+" required>
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Price Range</label>
+                                        <div class="flex items-center gap-3">
+                                            <input type="number" id="pkg_min_price" class="w-full rounded-2xl px-5 py-4 text-sm bg-slate-900/50 border-white/5" placeholder="Min (e.g. 200000)" required>
+                                            <span class="text-slate-600 font-bold">—</span>
+                                            <input type="number" id="pkg_max_price" class="w-full rounded-2xl px-5 py-4 text-sm bg-slate-900/50 border-white/5" placeholder="Max (e.g. 1000000)" required>
+                                        </div>
                                     </div>
-                                    <div class="space-y-2">
-                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Core Features (CSV)</label>
-                                        <textarea id="pkg_features" rows="4" class="w-full rounded-2xl px-5 py-4 text-sm resize-none" placeholder="Feature A, Feature B, Feature C..." required></textarea>
+                                    <div class="space-y-3">
+                                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Core Features</label>
+                                        <div class="flex gap-2">
+                                            <input type="text" id="feature_input" class="flex-grow rounded-xl px-4 py-3 text-sm" placeholder="Add feature...">
+                                            <button type="button" onclick="addFeatureItem()" class="px-4 bg-purple-600 rounded-xl font-bold text-white">+</button>
+                                        </div>
+                                        <div id="feature_list" class="space-y-2 max-h-40 overflow-y-auto p-2 bg-slate-900/50 rounded-xl border border-white/5">
+                                            <!-- Items added here -->
+                                        </div>
                                     </div>
                                     <div class="flex items-center justify-between p-5 bg-slate-900/40 rounded-2xl border border-white/5">
                                         <label for="pkg_recommended" class="text-xs font-bold text-slate-400 uppercase tracking-wider">Highlight as Popular</label>
@@ -603,6 +636,31 @@ app.get('/admin', (req, res) => {
                     document.getElementById('tab-' + tab).className = 'pb-1 transition-all tab-active';
                 }
 
+                let currentFeatures = [];
+                function addFeatureItem() {
+                    const input = document.getElementById('feature_input');
+                    const val = input.value.trim();
+                    if(!val) return;
+                    currentFeatures.push(val);
+                    input.value = '';
+                    renderFeatureList();
+                }
+
+                function removeFeatureItem(index) {
+                    currentFeatures.splice(index, 1);
+                    renderFeatureList();
+                }
+
+                function renderFeatureList() {
+                    const list = document.getElementById('feature_list');
+                    list.innerHTML = currentFeatures.map((f, i) => \`
+                        <div class="flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg text-xs group">
+                            <span class="text-slate-300">\${f}</span>
+                            <button type="button" onclick="removeFeatureItem(\${i})" class="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+                        </div>
+                    \`).join('');
+                }
+
                 function toggleProfileModal() {
                     const modal = document.getElementById('profileModal');
                     modal.classList.toggle('hidden');
@@ -670,6 +728,7 @@ app.get('/admin', (req, res) => {
                     const formData = new FormData();
                     formData.append('title', document.getElementById('u_title').value);
                     formData.append('category', document.getElementById('u_category').value);
+                    formData.append('image_url', document.getElementById('u_image_url').value);
                     const file = document.getElementById('u_image').files[0];
                     if(file) formData.append('image', file);
                     await fetch('/api/projects/featured', { method: 'POST', body: formData });
@@ -681,6 +740,7 @@ app.get('/admin', (req, res) => {
                     const formData = new FormData();
                     formData.append('title', document.getElementById('t_title').value);
                     formData.append('category', document.getElementById('t_category').value);
+                    formData.append('image_url', document.getElementById('t_image_url').value);
                     const file = document.getElementById('t_image').files[0];
                     if(file) formData.append('image', file);
                     await fetch('/api/projects/latest', { method: 'POST', body: formData });
@@ -718,18 +778,34 @@ app.get('/admin', (req, res) => {
 
                 document.getElementById('packageForm').onsubmit = async (e) => {
                     e.preventDefault();
+                    if(currentFeatures.length === 0) return alert('Add at least one feature');
+                    
+                    const min = parseInt(document.getElementById('pkg_min_price').value);
+                    const max = parseInt(document.getElementById('pkg_max_price').value);
+                    const formattedPrice = \`Rp \${min.toLocaleString('id-ID')} - Rp \${max.toLocaleString('id-ID')}\`;
+
                     const body = {
                         name: document.getElementById('pkg_name').value,
-                        price: document.getElementById('pkg_price').value,
-                        features: document.getElementById('pkg_features').value,
+                        price: formattedPrice,
+                        features: currentFeatures.join(', '),
                         recommended: document.getElementById('pkg_recommended').checked
                     };
-                    await fetch('/api/packages', {
+                    const res = await fetch('/api/packages', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body)
                     });
-                    e.target.reset(); fetchPackages();
+                    
+                    if(!res.ok) {
+                        const err = await res.json();
+                        alert('Gagal menyimpan: ' + (err.message || 'Error Unknown'));
+                        return;
+                    }
+
+                    e.target.reset();
+                    currentFeatures = [];
+                    renderFeatureList();
+                    fetchPackages();
                 };
 
                 async function deletePackage(id) {
