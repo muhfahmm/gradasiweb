@@ -200,7 +200,10 @@ app.post('/api/projects/latest', verifyToken, upload.single('image'), async (req
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: 'DB Error' });
+    console.error("DB Error:", err.message);
+    const newItem = { id: Date.now(), title, description, image_url, link, category };
+    mockProyekTerbaru.push(newItem);
+    res.status(201).json(newItem);
   }
 });
 
@@ -210,7 +213,8 @@ app.delete('/api/projects/latest/:id', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM proyek_terbaru WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    res.status(500).send();
+    mockProyekTerbaru = mockProyekTerbaru.filter(i => i.id != id);
+    res.status(204).send();
   }
 });
 
@@ -233,6 +237,7 @@ app.post('/api/packages', verifyToken, async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    console.error("DB Error:", err.message);
     const newItem = { id: Date.now(), name, price, features, recommended };
     mockPackages.push(newItem);
     res.status(201).json(newItem);
@@ -270,7 +275,10 @@ app.post('/api/team', verifyToken, upload.single('image'), async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: 'DB Error' });
+    console.error("DB Error:", err.message);
+    const newItem = { id: Date.now(), name, role, image };
+    mockTeam.push(newItem);
+    res.status(201).json(newItem);
   }
 });
 
@@ -280,7 +288,8 @@ app.delete('/api/team/:id', verifyToken, async (req, res) => {
     await pool.query('DELETE FROM team WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
-    res.status(500).send();
+    mockTeam = mockTeam.filter(i => i.id != id);
+    res.status(204).send();
   }
 });
 
@@ -678,9 +687,6 @@ app.get('/admin', (req, res) => {
                     </div>
                 </div>
             </div>
-
-            ${fs.readFileSync(path.join(__dirname, 'views', 'modals', 'ReplySuccessModal.html'), 'utf8')}
-
             <script>
                 // Clock
                 setInterval(() => {
