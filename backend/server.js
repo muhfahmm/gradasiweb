@@ -45,9 +45,9 @@ let mockProjects = [
 ];
 
 let mockPackages = [
-  { id: 1, name: 'Starter', price: 'Rp 1.5jt', features: 'Landing Page 1 Halaman, Responsive Design, Domain .com (1 thn), SSL Certificate, Support 1 Bulan', recommended: false },
-  { id: 2, name: 'Business', price: 'Rp 3.5jt', features: 'Hingga 5 Halaman, SEO Optimization, Domain .com (1 thn), Email Profesional, Support 3 Bulan', recommended: true },
-  { id: 3, name: 'Enterprise', price: 'Rp 7jt+', features: 'Custom Web System, E-Commerce Ready, High Performance, Premium Support, Maintenance Selamanya', recommended: false }
+  { id: 1, name: 'Lite Showcase', price: 'Rp 300rb', features: 'Single Landing Page, Desain Modern, Responsive Mobile, Integrasi WhatsApp, Hosting Gratis, Revisi 1x', recommended: false },
+  { id: 2, name: 'Business Pro', price: 'Rp 1jt', features: 'Hingga 5 Halaman, Custom Domain .com, Email Bisnis, SEO Optimized, Panel Admin Lite, Support 3 Bulan', recommended: true },
+  { id: 3, name: 'Elite Enterprise', price: 'Rp 5jt', features: 'Sistem Kustom (E-Commerce/ERP), High-Speed Hosting, Keamanan SSL Premium, Maintenance 6 Bulan, Full Source Code, Konsultasi Gratis', recommended: false }
 ];
 
 // API Routes
