@@ -16,9 +16,6 @@ const Hero = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
         >
-          <div className="inline-block px-4 py-1.5 glass rounded-full text-xs font-semibold tracking-wider uppercase mb-6 text-accent-primary border border-accent-primary/20">
-            Agency Kreatif Digital #1
-          </div>
           <h1 className="text-5xl md:text-8xl font-bold mb-8 leading-[1.1]">
             Transformasi Digital <br />
             Bersama <span className="gradient-text">GRADASIWEB</span>

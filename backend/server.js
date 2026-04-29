@@ -179,6 +179,28 @@ app.delete('/api/projects/featured/:id', verifyToken, async (req, res) => {
     res.status(204).send();
   }
 });
+app.put('/api/projects/featured/:id', verifyToken, upload.single('image'), async (req, res) => {
+  const { id } = req.params;
+  const { title, description, link, category } = req.body;
+  const image_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image_url;
+  try {
+    const result = await pool.query(
+      'UPDATE proyek_unggulan SET title = $1, description = $2, image_url = COALESCE($3, image_url), link = $4, category = $5 WHERE id = $6 RETURNING *',
+      [title, description, image_url, link, category, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const index = mockProyekUnggulan.findIndex(i => i.id == id);
+    if (index !== -1) {
+      mockProyekUnggulan[index] = { ...mockProyekUnggulan[index], title, description, image_url: image_url || mockProyekUnggulan[index].image_url, link, category };
+      res.json(mockProyekUnggulan[index]);
+    } else {
+      res.status(404).json({ message: 'Not found' });
+    }
+  }
+});
+
 
 // Projects API (Terbaru)
 app.get('/api/projects/latest', async (req, res) => {
@@ -217,6 +239,28 @@ app.delete('/api/projects/latest/:id', verifyToken, async (req, res) => {
     res.status(204).send();
   }
 });
+app.put('/api/projects/latest/:id', verifyToken, upload.single('image'), async (req, res) => {
+  const { id } = req.params;
+  const { title, description, link, category } = req.body;
+  const image_url = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image_url;
+  try {
+    const result = await pool.query(
+      'UPDATE proyek_terbaru SET title = $1, description = $2, image_url = COALESCE($3, image_url), link = $4, category = $5 WHERE id = $6 RETURNING *',
+      [title, description, image_url, link, category, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const index = mockProyekTerbaru.findIndex(i => i.id == id);
+    if (index !== -1) {
+      mockProyekTerbaru[index] = { ...mockProyekTerbaru[index], title, description, image_url: image_url || mockProyekTerbaru[index].image_url, link, category };
+      res.json(mockProyekTerbaru[index]);
+    } else {
+      res.status(404).json({ message: 'Not found' });
+    }
+  }
+});
+
 
 // Routes simplified for ease of use
 app.get('/api/packages', async (req, res) => {
@@ -254,6 +298,27 @@ app.delete('/api/packages/:id', verifyToken, async (req, res) => {
     res.status(204).send();
   }
 });
+app.put('/api/packages/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, price, features, recommended } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE packages SET name = $1, price = $2, features = $3, recommended = $4 WHERE id = $5 RETURNING *',
+      [name, price, features, recommended, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const index = mockPackages.findIndex(i => i.id == id);
+    if (index !== -1) {
+      mockPackages[index] = { ...mockPackages[index], name, price, features, recommended };
+      res.json(mockPackages[index]);
+    } else {
+      res.status(404).json({ message: 'Not found' });
+    }
+  }
+});
+
 
 // Team API
 app.get('/api/team', async (req, res) => {
@@ -292,6 +357,28 @@ app.delete('/api/team/:id', verifyToken, async (req, res) => {
     res.status(204).send();
   }
 });
+app.put('/api/team/:id', verifyToken, upload.single('image'), async (req, res) => {
+  const { id } = req.params;
+  const { name, role } = req.body;
+  const image = req.file ? `http://localhost:${port}/uploads/${req.file.filename}` : req.body.image;
+  try {
+    const result = await pool.query(
+      'UPDATE team SET name = $1, role = $2, image = COALESCE($3, image) WHERE id = $4 RETURNING *',
+      [name, role, image, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const index = mockTeam.findIndex(i => i.id == id);
+    if (index !== -1) {
+      mockTeam[index] = { ...mockTeam[index], name, role, image: image || mockTeam[index].image };
+      res.json(mockTeam[index]);
+    } else {
+      res.status(404).json({ message: 'Not found' });
+    }
+  }
+});
+
 
 // Serve Admin UI
 app.get('/admin', (req, res) => {
@@ -470,6 +557,7 @@ app.get('/admin', (req, res) => {
                                 </h3>
                                 <form id="unggulanForm" class="space-y-6">
                                     <div class="space-y-2">
+                                        <input type="hidden" id="u_id">
                                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Title</label>
                                         <input type="text" id="u_title" class="w-full rounded-2xl px-5 py-4 text-sm" required>
                                     </div>
@@ -485,7 +573,7 @@ app.get('/admin', (req, res) => {
                                             <input type="text" id="u_image_url" placeholder="Paste Image URL" class="w-full rounded-2xl px-5 py-4 text-sm">
                                         </div>
                                     </div>
-                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Unggulan</button>
+                                    <button type="submit" id="u_submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Unggulan</button>
                                 </form>
                             </div>
                         </div>
@@ -506,6 +594,7 @@ app.get('/admin', (req, res) => {
                                 </h3>
                                 <form id="terbaruForm" class="space-y-6">
                                     <div class="space-y-2">
+                                        <input type="hidden" id="t_id">
                                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Title</label>
                                         <input type="text" id="t_title" class="w-full rounded-2xl px-5 py-4 text-sm" required>
                                     </div>
@@ -521,7 +610,7 @@ app.get('/admin', (req, res) => {
                                             <input type="text" id="t_image_url" placeholder="Paste Image URL" class="w-full rounded-2xl px-5 py-4 text-sm">
                                         </div>
                                     </div>
-                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Terbaru</button>
+                                    <button type="submit" id="t_submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Terbaru</button>
                                 </form>
                             </div>
                         </div>
@@ -542,6 +631,7 @@ app.get('/admin', (req, res) => {
                                 </h3>
                                 <form id="packageForm" class="space-y-6">
                                     <div class="space-y-2">
+                                        <input type="hidden" id="pkg_id">
                                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Plan Name</label>
                                         <input type="text" id="pkg_name" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="e.g. Enterprise" required>
                                     </div>
@@ -567,7 +657,7 @@ app.get('/admin', (req, res) => {
                                         <label for="pkg_recommended" class="text-xs font-bold text-slate-400 uppercase tracking-wider">Highlight as Popular</label>
                                         <input type="checkbox" id="pkg_recommended" class="w-6 h-6 rounded-lg accent-blue-600">
                                     </div>
-                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Tier</button>
+                                    <button type="submit" id="pkg_submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Save Tier</button>
                                 </form>
                             </div>
                         </div>
@@ -591,6 +681,7 @@ app.get('/admin', (req, res) => {
                                 </h3>
                                 <form id="teamForm" class="space-y-6">
                                     <div class="space-y-2">
+                                        <input type="hidden" id="member_id">
                                         <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
                                         <input type="text" id="member_name" class="w-full rounded-2xl px-5 py-4 text-sm" placeholder="John Doe" required>
                                     </div>
@@ -606,7 +697,7 @@ app.get('/admin', (req, res) => {
                                             <input type="text" id="member_image_url" placeholder="Paste Photo URL" class="w-full rounded-2xl px-5 py-4 text-sm">
                                         </div>
                                     </div>
-                                    <button type="submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Add to Team</button>
+                                    <button type="submit" id="team_submit" class="w-full btn-primary py-4 rounded-2xl font-bold text-sm text-white">Add to Team</button>
                                 </form>
                             </div>
                         </div>
@@ -769,15 +860,17 @@ app.get('/admin', (req, res) => {
                 }
 
                 // Data Handling
+                let featuredData = [];
+                let latestData = [];
                 async function fetchProjects() {
                     try {
                         const resF = await fetch('/api/projects/featured');
-                        const dataF = await resF.json();
+                        featuredData = await resF.json();
                         const resL = await fetch('/api/projects/latest');
-                        const dataL = await resL.json();
+                        latestData = await resL.json();
                         
-                        document.getElementById('stat-unggulan').innerText = dataF.length;
-                        document.getElementById('stat-terbaru').innerText = dataL.length;
+                        document.getElementById('stat-unggulan').innerText = featuredData.length;
+                        document.getElementById('stat-terbaru').innerText = latestData.length;
                         
                         const renderItem = (p, type) => \`
                             <div class="glass bg-slate-900/30 border border-white/5 p-6 rounded-[2.5rem] group hover:border-blue-500/30 transition-all overflow-hidden relative">
@@ -786,55 +879,91 @@ app.get('/admin', (req, res) => {
                                     <div class="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest text-blue-400 border border-white/10">\${p.category}</div>
                                 </div>
                                 <h3 class="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">\${p.title}</h3>
-                                <div class="flex justify-between items-center pt-4 border-t border-white/5">
-                                    <button onclick="deleteProject(\${p.id}, '\${type}')" class="w-full py-2 rounded-xl bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
-                                        Delete Project
+                                <div class="flex gap-2 pt-4 border-t border-white/5">
+                                    <button onclick="editProjectItem('\${type}', \${p.id})" class="flex-grow py-2 rounded-xl bg-blue-500/10 text-blue-500 text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all">
+                                        Edit
+                                    </button>
+                                    <button onclick="deleteProject(\${p.id}, '\${type}')" class="flex-grow py-2 rounded-xl bg-red-500/10 text-red-500 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                                        Delete
                                     </button>
                                 </div>
                             </div>
                         \`;
 
-                        document.getElementById('featuredList').innerHTML = dataF.map(p => renderItem(p, 'featured')).join('') || '<div class="col-span-full py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No featured projects</div>';
-                        document.getElementById('latestList').innerHTML = dataL.map(p => renderItem(p, 'latest')).join('') || '<div class="col-span-full py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No latest projects</div>';
+                        document.getElementById('featuredList').innerHTML = featuredData.map(p => renderItem(p, 'featured')).join('') || '<div class="col-span-full py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No featured projects</div>';
+                        document.getElementById('latestList').innerHTML = latestData.map(p => renderItem(p, 'latest')).join('') || '<div class="col-span-full py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No latest projects</div>';
                     } catch (e) { console.error(e); }
+                }
+
+                function editProjectItem(type, id) {
+                    const list = type === 'featured' ? featuredData : latestData;
+                    const p = list.find(item => item.id == id);
+                    if(!p) return;
+                    editProject(type, p.id, p.title, p.category, p.image_url);
+                }
+
+                function editProject(type, id, title, category, imageUrl) {
+                    const prefix = type === 'featured' ? 'u' : 't';
+                    document.getElementById(prefix + '_id').value = id;
+                    document.getElementById(prefix + '_title').value = title;
+                    document.getElementById(prefix + '_category').value = category;
+                    document.getElementById(prefix + '_image_url').value = imageUrl;
+                    document.getElementById(prefix + '_submit').innerText = 'Update Project';
                 }
 
                 document.getElementById('unggulanForm').onsubmit = async (e) => {
                     e.preventDefault();
+                    const id = document.getElementById('u_id').value;
                     const formData = new FormData();
                     formData.append('title', document.getElementById('u_title').value);
                     formData.append('category', document.getElementById('u_category').value);
                     formData.append('image_url', document.getElementById('u_image_url').value);
                     const file = document.getElementById('u_image').files[0];
                     if(file) formData.append('image', file);
-                    await fetch('/api/projects/featured', { method: 'POST', body: formData });
-                    e.target.reset(); fetchProjects();
+                    
+                    const url = id ? '/api/projects/featured/' + id : '/api/projects/featured';
+                    const method = id ? 'PUT' : 'POST';
+                    
+                    await fetch(url, { method, body: formData });
+                    e.target.reset(); 
+                    document.getElementById('u_id').value = '';
+                    document.getElementById('u_submit').innerText = 'Save Unggulan';
+                    fetchProjects();
                 };
 
                 document.getElementById('terbaruForm').onsubmit = async (e) => {
                     e.preventDefault();
+                    const id = document.getElementById('t_id').value;
                     const formData = new FormData();
                     formData.append('title', document.getElementById('t_title').value);
                     formData.append('category', document.getElementById('t_category').value);
                     formData.append('image_url', document.getElementById('t_image_url').value);
                     const file = document.getElementById('t_image').files[0];
                     if(file) formData.append('image', file);
-                    await fetch('/api/projects/latest', { method: 'POST', body: formData });
-                    e.target.reset(); fetchProjects();
+                    
+                    const url = id ? '/api/projects/latest/' + id : '/api/projects/latest';
+                    const method = id ? 'PUT' : 'POST';
+                    
+                    await fetch(url, { method, body: formData });
+                    e.target.reset();
+                    document.getElementById('t_id').value = '';
+                    document.getElementById('t_submit').innerText = 'Save Terbaru';
+                    fetchProjects();
                 };
 
                 async function deleteProject(id, type) {
                     if(!confirm('Archive this project permanentely?')) return;
-                    await fetch(\`/api/projects/\${type}/\${id}\`, { method: 'DELETE' });
+                    await fetch('/api/projects/' + type + '/' + id, { method: 'DELETE' });
                     fetchProjects();
                 }
 
+                let packagesData = [];
                 async function fetchPackages() {
                     try {
                         const res = await fetch('/api/packages');
-                        const data = await res.json();
-                        document.getElementById('stat-packages').innerText = data.length;
-                        document.getElementById('packageList').innerHTML = data.map(p => \`
+                        packagesData = await res.json();
+                        document.getElementById('stat-packages').innerText = packagesData.length;
+                        document.getElementById('packageList').innerHTML = packagesData.map(p => \`
                             <div class="glass bg-slate-900/30 \${p.recommended ? 'border-blue-500/30' : 'border-white/5'} p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-6 group">
                                 <div class="flex-grow">
                                     <div class="flex items-center gap-4 mb-2">
@@ -844,18 +973,47 @@ app.get('/admin', (req, res) => {
                                     <div class="text-2xl font-bold gradient-text mb-4">\${p.price}</div>
                                     <div class="text-slate-500 text-xs font-medium max-w-2xl leading-relaxed">\${p.features}</div>
                                 </div>
-                                <button onclick="deletePackage(\${p.id})" class="shrink-0 p-4 rounded-2xl bg-red-500/5 text-red-500/50 hover:bg-red-500 hover:text-white transition-all">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
+                                <div class="flex gap-2 shrink-0">
+                                    <button onclick="editPackageItem(\${p.id})" class="p-4 rounded-2xl bg-blue-500/5 text-blue-500/50 hover:bg-blue-500 hover:text-white transition-all">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                    </button>
+                                    <button onclick="deletePackage(\${p.id})" class="p-4 rounded-2xl bg-red-500/5 text-red-500/50 hover:bg-red-500 hover:text-white transition-all">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </div>
                             </div>
                         \`).join('') || '<div class="py-20 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">No active tiers</div>';
                     } catch (e) { console.error(e); }
+                }
+
+                function editPackageItem(id) {
+                    const p = packagesData.find(item => item.id == id);
+                    if(!p) return;
+                    editPackage(p.id, p.name, p.price, p.features, p.recommended);
+                }
+
+                function editPackage(id, name, price, features, recommended) {
+                    document.getElementById('pkg_id').value = id;
+                    document.getElementById('pkg_name').value = name;
+                    
+                    const cleanPrice = price.replace(/\./g, '');
+                    const cleanPrices = cleanPrice.match(/\d+/g);
+                    if(cleanPrices && cleanPrices.length >= 2) {
+                        document.getElementById('pkg_min_price').value = cleanPrices[0];
+                        document.getElementById('pkg_max_price').value = cleanPrices[1];
+                    }
+                    
+                    currentFeatures = features.split(', ').filter(f => f);
+                    renderFeatureList();
+                    document.getElementById('pkg_recommended').checked = recommended;
+                    document.getElementById('pkg_submit').innerText = 'Update Tier';
                 }
 
                 document.getElementById('packageForm').onsubmit = async (e) => {
                     e.preventDefault();
                     if(currentFeatures.length === 0) return alert('Add at least one feature');
                     
+                    const id = document.getElementById('pkg_id').value;
                     const min = parseInt(document.getElementById('pkg_min_price').value);
                     const max = parseInt(document.getElementById('pkg_max_price').value);
                     const formattedPrice = \`Rp \${min.toLocaleString('id-ID')} - Rp \${max.toLocaleString('id-ID')}\`;
@@ -866,8 +1024,12 @@ app.get('/admin', (req, res) => {
                         features: currentFeatures.join(', '),
                         recommended: document.getElementById('pkg_recommended').checked
                     };
-                    const res = await fetch('/api/packages', {
-                        method: 'POST',
+                    
+                    const url = id ? '/api/packages/' + id : '/api/packages';
+                    const method = id ? 'PUT' : 'POST';
+
+                    const res = await fetch(url, {
+                        method,
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body)
                     });
@@ -879,6 +1041,8 @@ app.get('/admin', (req, res) => {
                     }
 
                     e.target.reset();
+                    document.getElementById('pkg_id').value = '';
+                    document.getElementById('pkg_submit').innerText = 'Save Tier';
                     currentFeatures = [];
                     renderFeatureList();
                     fetchPackages();
@@ -890,12 +1054,13 @@ app.get('/admin', (req, res) => {
                     fetchPackages();
                 }
 
+                let teamData = [];
                 async function fetchTeam() {
                     try {
                         const res = await fetch('/api/team');
-                        const data = await res.json();
-                        document.getElementById('stat-team').innerText = data.length;
-                        document.getElementById('teamList').innerHTML = data.map(m => \`
+                        teamData = await res.json();
+                        document.getElementById('stat-team').innerText = teamData.length;
+                        document.getElementById('teamList').innerHTML = teamData.map(m => \`
                             <div class="glass bg-slate-900/30 border border-white/5 p-6 rounded-[2.5rem] flex items-center gap-6 group">
                                 <div class="w-20 h-20 rounded-2xl overflow-hidden shrink-0 border border-white/10">
                                     <img src="\${m.image || 'https://via.placeholder.com/200'}" class="w-full h-full object-cover group-hover:scale-110 transition-transform" />
@@ -904,16 +1069,36 @@ app.get('/admin', (req, res) => {
                                     <h4 class="font-bold text-white text-lg">\${m.name}</h4>
                                     <p class="text-emerald-400 text-xs font-bold uppercase tracking-widest">\${m.role}</p>
                                 </div>
-                                <button onclick="deleteMember(\${m.id})" class="p-3 rounded-xl bg-red-500/5 text-red-500/30 hover:bg-red-500 hover:text-white transition-all">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
+                                <div class="flex gap-2 shrink-0">
+                                    <button onclick="editTeamItem(\${m.id})" class="p-3 rounded-xl bg-blue-500/5 text-blue-500/30 hover:bg-blue-500 hover:text-white transition-all">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                    </button>
+                                    <button onclick="deleteMember(\${m.id})" class="p-3 rounded-xl bg-red-500/5 text-red-500/30 hover:bg-red-500 hover:text-white transition-all">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </div>
                             </div>
                         \`).join('') || '<div class="py-10 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20 italic">No members added</div>';
                     } catch (e) { console.error(e); }
                 }
 
+                function editTeamItem(id) {
+                    const m = teamData.find(item => item.id == id);
+                    if(!m) return;
+                    editTeam(m.id, m.name, m.role, m.image);
+                }
+
+                function editTeam(id, name, role, imageUrl) {
+                    document.getElementById('member_id').value = id;
+                    document.getElementById('member_name').value = name;
+                    document.getElementById('member_role').value = role;
+                    document.getElementById('member_image_url').value = imageUrl;
+                    document.getElementById('team_submit').innerText = 'Update Member';
+                }
+
                 document.getElementById('teamForm').onsubmit = async (e) => {
                     e.preventDefault();
+                    const id = document.getElementById('member_id').value;
                     const formData = new FormData();
                     formData.append('name', document.getElementById('member_name').value);
                     formData.append('role', document.getElementById('member_role').value);
@@ -921,8 +1106,14 @@ app.get('/admin', (req, res) => {
                     const file = document.getElementById('member_image').files[0];
                     if(file) formData.append('image', file);
 
-                    await fetch('/api/team', { method: 'POST', body: formData });
-                    e.target.reset(); fetchTeam();
+                    const url = id ? '/api/team/' + id : '/api/team';
+                    const method = id ? 'PUT' : 'POST';
+
+                    await fetch(url, { method, body: formData });
+                    e.target.reset();
+                    document.getElementById('member_id').value = '';
+                    document.getElementById('team_submit').innerText = 'Add to Team';
+                    fetchTeam();
                 };
 
                 async function deleteMember(id) {
@@ -931,13 +1122,14 @@ app.get('/admin', (req, res) => {
                     fetchTeam(); fetchMessages();
                 }
 
+                let messagesData = [];
                 async function fetchMessages() {
                     try {
                         const res = await fetch('/api/messages');
-                        const data = await res.json();
-                        document.getElementById('stat-messages').innerText = data.length;
+                        messagesData = await res.json();
+                        document.getElementById('stat-messages').innerText = messagesData.length;
                         
-                        const unread = data.filter(m => !m.is_read).length;
+                        const unread = messagesData.filter(m => !m.is_read).length;
                         const navCount = document.getElementById('nav-msg-count');
                         if(unread > 0) {
                             navCount.innerText = unread;
@@ -946,7 +1138,7 @@ app.get('/admin', (req, res) => {
                             navCount.classList.add('hidden');
                         }
 
-                        document.getElementById('messageList').innerHTML = data.map(m => \`
+                        document.getElementById('messageList').innerHTML = messagesData.map(m => \`
                             <div class="glass bg-slate-900/30 border border-white/5 p-8 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-start gap-8 group">
                                 <div class="flex-grow">
                                     <div class="flex items-center gap-4 mb-4">
@@ -971,7 +1163,7 @@ app.get('/admin', (req, res) => {
                                 </div>
                                 <div class="flex gap-3 shrink-0">
                                     \${!m.reply_content ? \`
-                                        <button onclick="openReplyModal(\${m.id}, '\${m.email}', this.dataset.msg)" data-msg="\${m.message.replace(/"/g, '&quot;')}" class="px-6 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:scale-105 transition-all">Reply via Email</button>
+                                        <button onclick="openReplyModalItem(\${m.id})" class="px-6 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:scale-105 transition-all">Reply via Email</button>
                                     \` : ''}
                                     <button onclick="deleteMessage(\${m.id})" class="p-3 rounded-xl bg-red-500/5 text-red-500/30 hover:bg-red-500 hover:text-white transition-all">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -980,6 +1172,12 @@ app.get('/admin', (req, res) => {
                             </div>
                         \`).join('') || '<div class="py-20 text-center text-slate-600 font-bold uppercase tracking-widest italic opacity-20">Your inbox is empty</div>';
                     } catch (e) { console.error(e); }
+                }
+
+                function openReplyModalItem(id) {
+                    const m = messagesData.find(item => item.id == id);
+                    if(!m) return;
+                    openReplyModal(m.id, m.email, m.message);
                 }
 
                 function openReplyModal(id, email, message) {
@@ -1004,7 +1202,7 @@ app.get('/admin', (req, res) => {
                     btn.innerText = 'Sending to Gmail...';
 
                     try {
-                        const res = await fetch(\`/api/messages/\${id}/reply\`, {
+                        const res = await fetch('/api/messages/' + id + '/reply', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ reply_content })
