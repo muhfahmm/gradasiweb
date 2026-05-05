@@ -1,5 +1,4 @@
-import React from 'react';
-import { Instagram, Github, Mail, Phone, MapPin } from 'lucide-react';
+import { Github, Mail, Phone } from 'lucide-react';
 
 const Footer = () => {
   return (
@@ -13,8 +12,15 @@ const Footer = () => {
               Solusi digital terpercaya untuk membangun identitas bisnis Anda secara profesional dan inovatif.
             </p>
             <div className="flex gap-4">
-              <a href="https://www.instagram.com/mufacode/" target="_blank" rel="noopener noreferrer" className="p-2.5 glass rounded-xl hover:text-accent-primary hover:scale-110 transition-all duration-300"><Instagram size={20} /></a>
-              <a href="https://github.com/muhfahmm" target="_blank" rel="noopener noreferrer" className="p-2.5 glass rounded-xl hover:text-accent-primary hover:scale-110 transition-all duration-300"><Github size={20} /></a>
+              <a href="https://www.instagram.com/mufacode/" target="_blank" rel="noopener noreferrer" className="p-2.5 glass rounded-xl hover:text-accent-primary hover:scale-110 transition-all duration-300 text-xl flex items-center justify-center w-11 h-11">
+                <i className="bi bi-instagram"></i>
+              </a>
+              <a href="https://www.tiktok.com/@mufacode" target="_blank" rel="noopener noreferrer" className="p-2.5 glass rounded-xl hover:text-accent-primary hover:scale-110 transition-all duration-300 text-xl flex items-center justify-center w-11 h-11">
+                <i className="bi bi-tiktok"></i>
+              </a>
+              <a href="https://github.com/muhfahmm" target="_blank" rel="noopener noreferrer" className="p-2.5 glass rounded-xl hover:text-accent-primary hover:scale-110 transition-all duration-300">
+                <Github size={20} />
+              </a>
             </div>
           </div>
 
@@ -37,7 +43,6 @@ const Footer = () => {
             <ul className="space-y-4 text-secondary text-sm">
               <li className="flex gap-3"><Mail size={18} className="text-accent-primary" /> gradasiweb@gmail.com</li>
               <li className="flex gap-3"><Phone size={18} className="text-accent-primary" /> +62 889 8351 4206</li>
-              <li className="flex gap-3"><MapPin size={18} className="text-accent-primary" /> Sukoharjo, Jawa Tengah</li>
             </ul>
           </div>
         </div>
